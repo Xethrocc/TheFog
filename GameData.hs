@@ -6,85 +6,85 @@ import GameTypes
 gameMap :: Map
 gameMap = 
  [
-  (0,"Home",[(1,N),(4,S)]),
-  (1,"Garden",[(0,S),(2,N)]),
-  (2,"Path",[(1,S),(3,N),(31,O),(39,W)]),
-  (3,"Path",[(6,N),(2,S)]),
-  (4,"Basement",[(0,N)]),
-  (5,"Errorfield",[]),
-  (6,"Path",[(12,N),(7,O),(8,W),(3,S)]),
-  (7,"Barn",[(6,W)]),
-  (8,"Graveyard",[(11,N),(9,W),(6,O)]),
-  (9,"Graveyard",[(10,N),(8,O)]),
-  (10,"Graveyard",[(9,S),(11,O),(29,SE)]),
-  (11,"Graveyard",[(10,W),(8,S)]),
-  (12,"Forest",[(13,N),(6,S)]),
-  (13,"Forest",[(12,S),(14,O),(15,W)]),
-  (14,"Forest",[(13,W),(18,N)]),
-  (15,"Forest",[(13,O),(16,N)]),
-  (16,"Forest",[(21,N),(15,S)]),
-  (17,"Forest",[(20,N),(28,SE)]),
-  (18,"Forest",[(19,N),(14,S)]),
-  (19,"Forest",[(20,W),(18,S),(24,O)]),
-  (20,"Forest",[(23,N),(19,O),(17,S),(21,W)]),
-  (21,"Forest",[(20,O),(22,W),(16,S)]),
-  (22,"Forest",[(21,O)]),
-  (23,"Glade",[(20,S)]),
-  (24,"Forest",[(25,N),(19,W)]),
-  (25,"Forest",[(26,N),(24,S)]),
-  (26,"Forest",[(27,N),(25,S)]),
-  (27,"Glade",[(26,S)]),
-  (28,"Earth Shrine",[(17,S)]),
-  (29,"Secret Grave Entrance",[(10,O),(30,W)]),
-  (30,"Dark Room",[(29,O)]),
-  (31,"Path",[(2,W),(32,O)]),
-  (32,"Path",[(31,W),(34,O),(33,S)]),
-  (33,"River",[(32,N),(38,SE)]),
-  (34,"Bridge",[(32,W),(35,O)]),
-  (35,"Courtyard of the Castle",[(34,W),(36,O)]),
-  (36,"Entrance Hall",[(35,W),(37,O)]),
-  (37,"Throne Room",[(36,W)]),
-  (38,"Water Shrine",[(33,N)]),
-  (39,"Path",[(2,O),(40,W)]),
-  (40,"Path",[(39,O),(41,W),(46,S)]),
-  (41,"Path",[(40,O),(42,W)]),
-  (42,"Stairs",[(41,O),(43,W)]),
-  (43,"Stairs",[(42,O),(44,W)]),
-  (44,"Top Of The Mountain",[(43,O),(45,SE)]),
-  (45,"Fire Shrine",[(44,S)]),
-  (46,"Path",[(40,N),(47,O),(48,W),(49,S)]),
-  (47,"Dead End",[(46,W)]),
-  (48,"Dead End",[(46,O)]),
-  (49,"Canyon",[(46,N),(50,SE)]),
-  (50,"Flying Stones",[(49,N),(51,SE)]),
-  (51,"Flying Stones",[(50,N),(52,S)]),
-  (52,"Air Shrine",[(49,N)]),
-  (53,"Start Menue",[(0,SE)]),
-  (54,"Wolf-Fight",[])  
+       Location {locId = 0, locName = "Home", locExits = [(1,N),(4,S)]},
+       Location {locId = 1, locName = "Garden", locExits = [(0,S),(2,N)]},
+       Location {locId = 2, locName = "Path", locExits = [(1,S),(3,N),(31,O),(39,W)]},
+       Location {locId = 3, locName = "Path", locExits = [(6,N),(2,S)]},
+       Location {locId = 4, locName = "Basement", locExits = [(0,N)]},
+       Location {locId = 5, locName = "Errorfield", locExits = []},
+       Location {locId = 6, locName = "Path", locExits = [(12,N),(7,O),(8,W),(3,S)]},
+       Location {locId = 7, locName = "Barn", locExits = [(6,W)]},
+       Location {locId = 8, locName = "Graveyard", locExits = [(11,N),(9,W),(6,O)]},
+       Location {locId = 9, locName = "Graveyard", locExits = [(10,N),(8,O)]},
+       Location {locId = 10, locName = "Graveyard", locExits = [(9,S),(11,O),(29,SE)]},
+       Location {locId = 11, locName = "Graveyard", locExits = [(10,W),(8,S)]},
+       Location {locId = 12, locName = "Forest", locExits = [(13,N),(6,S)]},
+       Location {locId = 13, locName = "Forest", locExits = [(12,S),(14,O),(15,W)]},
+       Location {locId = 14, locName = "Forest", locExits = [(13,W),(18,N)]},
+       Location {locId = 15, locName = "Forest", locExits = [(13,O),(16,N)]},
+       Location {locId = 16, locName = "Forest", locExits = [(21,N),(15,S)]},
+       Location {locId = 17, locName = "Forest", locExits = [(20,N),(28,SE)]},
+       Location {locId = 18, locName = "Forest", locExits = [(19,N),(14,S)]},
+       Location {locId = 19, locName = "Forest", locExits = [(20,W),(18,S),(24,O)]},
+       Location {locId = 20, locName = "Forest", locExits = [(23,N),(19,O),(17,S),(21,W)]},
+       Location {locId = 21, locName = "Forest", locExits = [(20,O),(22,W),(16,S)]},
+       Location {locId = 22, locName = "Forest", locExits = [(21,O)]},
+       Location {locId = 23, locName = "Glade", locExits = [(20,S)]},
+       Location {locId = 24, locName = "Forest", locExits = [(25,N),(19,W)]},
+       Location {locId = 25, locName = "Forest", locExits = [(26,N),(24,S)]},
+       Location {locId = 26, locName = "Forest", locExits = [(27,N),(25,S)]},
+       Location {locId = 27, locName = "Glade", locExits = [(26,S)]},
+       Location {locId = 28, locName = "Earth Shrine", locExits = [(17,S)]},
+       Location {locId = 29, locName = "Secret Grave Entrance", locExits = [(10,O),(30,W)]},
+       Location {locId = 30, locName = "Dark Room", locExits = [(29,O)]},
+       Location {locId = 31, locName = "Path", locExits = [(2,W),(32,O)]},
+       Location {locId = 32, locName = "Path", locExits = [(31,W),(34,O),(33,S)]},
+       Location {locId = 33, locName = "River", locExits = [(32,N),(38,SE)]},
+       Location {locId = 34, locName = "Bridge", locExits = [(32,W),(35,O)]},
+       Location {locId = 35, locName = "Courtyard of the Castle", locExits = [(34,W),(36,O)]},
+       Location {locId = 36, locName = "Entrance Hall", locExits = [(35,W),(37,O)]},
+       Location {locId = 37, locName = "Throne Room", locExits = [(36,W)]},
+       Location {locId = 38, locName = "Water Shrine", locExits = [(33,N)]},
+       Location {locId = 39, locName = "Path", locExits = [(2,O),(40,W)]},
+       Location {locId = 40, locName = "Path", locExits = [(39,O),(41,W),(46,S)]},
+       Location {locId = 41, locName = "Path", locExits = [(40,O),(42,W)]},
+       Location {locId = 42, locName = "Stairs", locExits = [(41,O),(43,W)]},
+       Location {locId = 43, locName = "Stairs", locExits = [(42,O),(44,W)]},
+       Location {locId = 44, locName = "Top Of The Mountain", locExits = [(43,O),(45,SE)]},
+       Location {locId = 45, locName = "Fire Shrine", locExits = [(44,S)]},
+       Location {locId = 46, locName = "Path", locExits = [(40,N),(47,O),(48,W),(49,S)]},
+       Location {locId = 47, locName = "Dead End", locExits = [(46,W)]},
+       Location {locId = 48, locName = "Dead End", locExits = [(46,O)]},
+       Location {locId = 49, locName = "Canyon", locExits = [(46,N),(50,SE)]},
+       Location {locId = 50, locName = "Flying Stones", locExits = [(49,N),(51,SE)]},
+       Location {locId = 51, locName = "Flying Stones", locExits = [(50,N),(52,S)]},
+       Location {locId = 52, locName = "Air Shrine", locExits = [(49,N)]},
+       Location {locId = 53, locName = "Start Menue", locExits = [(0,SE)]},
+       Location {locId = 54, locName = "Wolf-Fight", locExits = []}
  ]
 
 
 objectList :: ObjectList
 objectList = 
        [
-       (0,0,"Paper","A note with a prophecy for this Land",["read","examine","burn"]),
-       (0,1,"Map","It's a simple map, you can 'read' it.",["read","examine","burn"]),
-       (1,2,"Apple","It's an Apple from your Appletree",["examine","take","pick"]),
-       (4,3,"Shield","It's a shield",["examine","take","pick"]),
-       (4,4,"Crystal","It's a slightly glowing Crystal",["examine","take","pick"]),
-       (38,5,"Water-Shrine","looks like a stone fountain",["examine","activate"]),
-       (45,6,"Fire-Shrine","looks like a burning pillar",["examine","activate"]),
-       (52,7,"Air-Shrine","A big Shrine made of marble",["examine","activate"]),
-       (28,8,"Earth-Shrine","looks like a simple shrine made of wood",["examine","activate"]),
-       (30,9,"Sword","The Sword Of A Thousand Truths",["examine","take"]),
-       (3,10,"Wolf","It's a dark Wolf, maybe you can 'attack' him..",["examine","attack","fight"]),
-       (33,11,"Princess","Looks like she fell in the river.. Try to 'save' her",["examine","save","help"]),
-       (0,12,"","",["examine"]),
-       (53,13,"Help","This is the Help",["read","examine","burn"]),
-       (99,14,"activated-Water-Shrine","It's the activated Water Shrine",["examine","activate"]),
-       (99,15,"ativated-Fire-Shrine","It's the activated Fire Shrine",["examine","activate"]),
-       (99,16,"ativated-Air-Shrine","It's the activated Air Shrine",["examine","activate"]),
-       (99,17,"ativated-Earth-Shrine","It's the activated Earth Shrine",["examine"])
+       Object {objPos = 0, objId = 0, objName = "Paper", objDescription = "A note with a prophecy for this Land", objActions = ["read","examine","burn"]},
+       Object {objPos = 0, objId = 1, objName = "Map", objDescription = "It's a simple map, you can 'read' it.", objActions = ["read","examine","burn"]},
+       Object {objPos = 1, objId = 2, objName = "Apple", objDescription = "It's an Apple from your Appletree", objActions = ["examine","take","pick"]},
+       Object {objPos = 4, objId = 3, objName = "Shield", objDescription = "It's a shield", objActions = ["examine","take","pick"]},
+       Object {objPos = 4, objId = 4, objName = "Crystal", objDescription = "It's a slightly glowing Crystal", objActions = ["examine","take","pick"]},
+       Object {objPos = 38, objId = 5, objName = "Water-Shrine", objDescription = "looks like a stone fountain", objActions = ["examine","activate"]},
+       Object {objPos = 45, objId = 6, objName = "Fire-Shrine", objDescription = "looks like a burning pillar", objActions = ["examine","activate"]},
+       Object {objPos = 52, objId = 7, objName = "Air-Shrine", objDescription = "A big Shrine made of marble", objActions = ["examine","activate"]},
+       Object {objPos = 28, objId = 8, objName = "Earth-Shrine", objDescription = "looks like a simple shrine made of wood", objActions = ["examine","activate"]},
+       Object {objPos = 30, objId = 9, objName = "Sword", objDescription = "The Sword Of A Thousand Truths", objActions = ["examine","take"]},
+       Object {objPos = 3, objId = 10, objName = "Wolf", objDescription = "It's a dark Wolf, maybe you can 'attack' him..", objActions = ["examine","attack","fight"]},
+       Object {objPos = 33, objId = 11, objName = "Princess", objDescription = "Looks like she fell in the river.. Try to 'save' her", objActions = ["examine","save","help"]},
+       Object {objPos = 0, objId = 12, objName = "", objDescription = "", objActions = ["examine"]},
+       Object {objPos = 53, objId = 13, objName = "Help", objDescription = "This is the Help", objActions = ["read","examine","burn"]},
+       Object {objPos = 99, objId = 14, objName = "activated-Water-Shrine", objDescription = "It's the activated Water Shrine", objActions = ["examine","activate"]},
+       Object {objPos = 99, objId = 15, objName = "activated-Fire-Shrine", objDescription = "It's the activated Fire Shrine", objActions = ["examine","activate"]},
+       Object {objPos = 99, objId = 16, objName = "activated-Air-Shrine", objDescription = "It's the activated Air Shrine", objActions = ["examine","activate"]},
+       Object {objPos = 99, objId = 17, objName = "activated-Earth-Shrine", objDescription = "It's the activated Earth Shrine", objActions = ["examine"]}
        ]
        
 objectText :: Array (ObjectID) String 
@@ -204,30 +204,3 @@ descr = array (0,54) distances where
                 ]   
         
     
-asciitest :: IO()
-asciitest = putStrLn  (("                              __"
-        ++ "\n                            .d$$b"
-        ++ "\n                          .' TO$;\\"
-        ++ "\n                         /  : TP._;"
-        ++ "\n                        / _.;  :Tb|"
-        ++ "\n                       /   /   ;j$j"
-        ++ "\n                   _.-\"       d$$$$"
-        ++ "\n                 .' ..       d$$$$;"
-        ++ "\n                /  /P'      d$$$$P. |\\"
-        ++ "\n               /   \"      .d$$$P' |\\^\"l"
-        ++ "\n             .'           `T$P^\"\"\"\"\"  :"
-        ++ "\n         ._.'      _.'                ;"
-        ++ "\n      `-.-\".-'-' ._.       _.-\"    .-\""
-        ++ "\n    `.-\" _____  ._              .-\""
-        ++ "\n   -(.g$$$$$$$b.              .'"
-        ++ "\n     \"\"^^T$$$P^)            .(:"
-        ++ "\n       _/  -\"  /.'         /:/;"
-        ++ "\n    ._.'-'`-'  \")/         /;/;"
-        ++ "\n `-.-\"..--\"\"   \" /         /  ;"
-        ++ "\n.-\" ..--\"\"        -'          :"
-        ++ "\n..--\"\"--.-\"         (\\      .-(\\"
-        ++ "\n  ..--\"\"              `-\\(\\/;`"
-        ++ "\n    _.                      :"
-        ++ "\n                            ;`-"
-        ++ "\n                           :\\"
-        ++ "\n                           ;  "))

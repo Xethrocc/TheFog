@@ -31,14 +31,26 @@ data Object = Object {
 
 type ObjectList = [Object]
 
-type Life       = Int
 
 type Inventory  = ObjectList
 
 
-type Character = (String,Steps,Ang,Def,Life)
+data Character = Character {
+    charName   :: String,
+    charSteps  :: Steps,
+    charAttack :: Ang,
+    charDefense :: Def,
+    charLife   :: Life
+} deriving (Eq, Show)
 
-type Steps     = Int
-type Ang       = Int
-type Def       = Int
-type Game  = (Location, Character, Inventory, ObjectList) -- you can modify the type
+type Steps = Int
+type Ang   = Int
+type Def   = Int
+type Life  = Int
+
+data Game = Game {
+    gameLocation  :: Location,
+    gameCharacter :: Character,
+    gameInventory :: Inventory,
+    gameObjects   :: ObjectList
+} deriving (Eq, Show)

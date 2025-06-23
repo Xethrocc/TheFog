@@ -2,9 +2,11 @@ module GameActions where
 
 import Data.List
 import Data.Maybe
+import qualified Data.Map as Map
+import Data.Array
 import GameTypes
 import GameData
-import GameUtils (random)
+import GameUtils
 
 -------- Aktionen ---------
 
@@ -20,49 +22,45 @@ doNothinExt x y i = (y,i)
 
 -- Objekt untersuchen
 examineObj :: Object -> IO()
-examineObj (a,b,c,d,actions) = putStrLn $ d
+examineObj Object { objId = d} = putStrLn $ objectText ! d
 
 -- Objekt lesen                        
 readObj :: Object -> IO()
-readObj (a,b,c,d,actions) = putStrLn $ objectText!b
+readObj Object { objId = b } = putStrLn $ objectText ! b
 
 -- Objekt anbrennen/verbrennen
 burnObj :: Object -> ObjectList -> Int -> ObjectList
-burnObj (a,b,c,d,actions) xs int = obj:lst
+burnObj obj objList randVal = newObj : delete obj objList
                           where
-                           obj = if ((random int) > 5) then (a,b,"burned-"++c,"It's the burned down "++c,["examine"]) else (a,b,c,d,actions)
-                           lst = delete (a,b,c,d,actions) xs
+                           newObj = if (randVal > 5) then obj { objName = "burned-" ++ objName obj, objDescription = "It's the burned down " ++ objName obj, objActions = ["examine"] } else obj
 
 -- Ojekt aktivieren                           
 activateObj :: Object -> ObjectList -> Inventory -> ObjectList
-activateObj (a,b,c,d,actions) xs ys = if (isJust (isInInv (objectList !! 4) ys)) then obj:lst else xs
-                              where 
-                               obj = (a,b,"activated-"++c,"It's The activated "++c,["examine"])
-                               lst = delete (a,b,c,d,actions) xs
+activateObj obj objList inv = if isJust (find (\o -> objId o == 4) inv) then newObj : delete obj objList else objList
+                               where
+                                newObj = obj { objName = "activated-" ++ objName obj, objDescription = "It's The activated " ++ objName obj, objActions = ["examine"] }
 
 -- Objekt nehmen -> ins Inventar nehmen und aus der Objektliste löschen                           
 takeObj :: Object -> ObjectList -> Inventory -> (ObjectList,Inventory)
-takeObj (a,b,c,d,actions) oL inv = (oL2,inv2)
+takeObj obj objList inv = (oL2,inv2)
                   where
-                   oL2 = delete (a,b,c,d,actions) oL
-                   inv2 | c=="Apple" = (a,b,c,d,["examine","consume","eat"]) : inv
-                        | otherwise  = (a,b,c,d,["examine"]) : inv
+                   oL2 = delete obj objList
+                   inv2 | objId obj == 2 = obj { objActions = ["examine","consume","eat"] } : inv -- Apple has objId 2
+                        | otherwise  = obj { objActions = ["examine"] } : inv
                    
 -- Objekt angreifen
 attackObj :: Object -> ObjectList -> ObjectList
-attackObj (a,b,c,d,actions) xs = obj:lst
+attackObj obj objList = newObj : delete obj objList
                           where
-                           obj = (a,b,"dead-"++c,"It's the dead "++c,["examine"])
-                           lst = delete (a,b,c,d,actions) xs  
+                           newObj = obj { objName = "dead-" ++ objName obj, objDescription = "It's the dead " ++ objName obj, objActions = ["examine"] }
                            
 -- Prinzessin retten (or not)
-savePrincess :: Object -> ObjectList -> Steps -> ObjectList
-savePrincess (a,b,c,d,actions) xs int = obj:lst
+savePrincess :: Object -> ObjectList -> Int -> ObjectList
+savePrincess obj objList randVal = newObj : delete obj objList
                           where
-                           obj = if ((random int) > 5) then (a,b,"saved-"++c,"It's the saved "++c,["examine"]) 
-                                 else if ((random int) < 3) then (a,b,"dead-"++c,"It's the dead "++c,["examine"]) 
-                                  else (a,b,c,d,actions)
-                           lst = delete (a,b,c,d,actions) xs  
+                           newObj = if (randVal > 5) then obj { objName = "saved-" ++ objName obj, objDescription = "It's the saved " ++ objName obj, objActions = ["examine"] }
+                                  else if (randVal < 3) then obj { objName = "dead-" ++ objName obj, objDescription = "It's the dead " ++ objName obj, objActions = ["examine"] }
+                                   else obj
 -- Das Inventar Anzeigen
 
 showInventory :: Inventory -> IO()
@@ -70,8 +68,5 @@ showInventory []     = putStrLn ("Your Inventory is empty")
 showInventory inv = putStrLn (show(map getObjStr inv))
 
 -- Nachsehen ob ein Objekt im Inventar ist
-isInInv :: Object -> Inventory -> Maybe Bool
-isInInv x [] = Nothing
-isInInv x (y:ys) 
-               | x==y      = Just True
-               | otherwise = isInInv x ys
+isInInv :: Object -> Inventory -> Bool
+isInInv obj inv = obj `elem` inv
