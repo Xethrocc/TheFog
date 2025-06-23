@@ -1,6 +1,10 @@
 import Ascii
-import Functions
 import System.Console.ANSI
+import GameTypes
+import GameData
+import GameActions
+import GameUtils
+import GameConstants
 
 main = do 
  game
@@ -128,85 +132,12 @@ game = do
     return ()
 
 -- input that exits the game
-quitCharacter = [":q", ":Q", ":e", ":E"] 
-quitFight     = ["flee","escape","run","Flee","Escape","Run"]
--- Inputs für die Richtungen u. anderes
-north         = ["North","north","N"     ,"n"         ]
-east          = ["East" ,"east" ,"O"     ,"o" ,"E","e"]
-south         = ["South","south","S"     ,"s"         ]
-west          = ["West" ,"west" ,"W"     ,"w"         ]
-secret        = ["game","dig","crawl","swim"          ]
-alldir        = north++west++south++east++secret++[""]
-actions       = ["take","pick","save","help","attack","hit","examine","read","activate"]
-changinAction = ["attack","burn","hit","save","help","fight"]
-invActions    = ["show Inventory","show inventory","Inventory","inventory","show Items","show items","Items","items"]
-savehelp      = ["save","help"]
 
 
 
 
 -- ------------------- GAME ---------------------
 
-type Game  = (Location, Character, Inventory, ObjectList) -- you can modify the type
 
-gameMap :: Map
-gameMap = 
- [
-  (0,"Home",[(1,N),(4,S)]),
-  (1,"Garden",[(0,S),(2,N)]),
-  (2,"Path",[(1,S),(3,N),(31,O),(39,W)]),
-  (3,"Path",[(6,N),(2,S)]),
-  (4,"Basement",[(0,N)]),
-  (5,"Errorfield",[]),
-  (6,"Path",[(12,N),(7,O),(8,W),(3,S)]),
-  (7,"Barn",[(6,W)]),
-  (8,"Graveyard",[(11,N),(9,W),(6,O)]),
-  (9,"Graveyard",[(10,N),(8,O)]),
-  (10,"Graveyard",[(9,S),(11,O),(29,SE)]),
-  (11,"Graveyard",[(10,W),(8,S)]),
-  (12,"Forest",[(13,N),(6,S)]),
-  (13,"Forest",[(12,S),(14,O),(15,W)]),
-  (14,"Forest",[(13,W),(18,N)]),
-  (15,"Forest",[(13,O),(16,N)]),
-  (16,"Forest",[(21,N),(15,S)]),
-  (17,"Forest",[(20,N),(28,SE)]),
-  (18,"Forest",[(19,N),(14,S)]),
-  (19,"Forest",[(20,W),(18,S),(24,O)]),
-  (20,"Forest",[(23,N),(19,O),(17,S),(21,W)]),
-  (21,"Forest",[(20,O),(22,W),(16,S)]),
-  (22,"Forest",[(21,O)]),
-  (23,"Glade",[(20,S)]),
-  (24,"Forest",[(25,N),(19,W)]),
-  (25,"Forest",[(26,N),(24,S)]),
-  (26,"Forest",[(27,N),(25,S)]),
-  (27,"Glade",[(26,S)]),
-  (28,"Earth Shrine",[(17,S)]),
-  (29,"Secret Grave Entrance",[(10,O),(30,W)]),
-  (30,"Dark Room",[(29,O)]),
-  (31,"Path",[(2,W),(32,O)]),
-  (32,"Path",[(31,W),(34,O),(33,S)]),
-  (33,"River",[(32,N),(38,SE)]),
-  (34,"Bridge",[(32,W),(35,O)]),
-  (35,"Courtyard of the Castle",[(34,W),(36,O)]),
-  (36,"Entrance Hall",[(35,W),(37,O)]),
-  (37,"Throne Room",[(36,W)]),
-  (38,"Water Shrine",[(33,N)]),
-  (39,"Path",[(2,O),(40,W)]),
-  (40,"Path",[(39,O),(41,W),(46,S)]),
-  (41,"Path",[(40,O),(42,W)]),
-  (42,"Stairs",[(41,O),(43,W)]),
-  (43,"Stairs",[(42,O),(44,W)]),
-  (44,"Top Of The Mountain",[(43,O),(45,SE)]),
-  (45,"Fire Shrine",[(44,S)]),
-  (46,"Path",[(40,N),(47,O),(48,W),(49,S)]),
-  (47,"Dead End",[(46,W)]),
-  (48,"Dead End",[(46,O)]),
-  (49,"Canyon",[(46,N),(50,SE)]),
-  (50,"Flying Stones",[(49,N),(51,SE)]),
-  (51,"Flying Stones",[(50,N),(52,S)]),
-  (52,"Air Shrine",[(49,N)]),
-  (53,"Start Menue",[(0,SE)]),
-  (54,"Wolf-Fight",[])  
- ]
 
 
