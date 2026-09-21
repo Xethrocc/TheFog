@@ -12,6 +12,14 @@ main :: IO ()
 main = do
   game
 
+drawBar :: Int -> Int -> String
+drawBar current maxHP
+    | maxHP <= 0 = "                    ]"
+    | otherwise =
+        let filled = min 10 (current * 10 `div` maxHP)
+            empty = 10 - filled
+        in (replicate filled '|') ++ (replicate empty ' ')
+
 handleMovement :: Game -> String -> IO Game
 handleMovement game direction = do
     let nextLocId = fromMaybe (locId (gameLocation game)) (locI (stringToDirection direction) (gameLocation game))
@@ -66,11 +74,40 @@ handleTake game obj = do
 handleFight :: Game -> Object -> IO Game
 handleFight game obj = do
     let fightGame = game { gameLocation = Location { locId = 54, locName = "Wolf-Fight", locExits = [] } }
-        wolfId = objId obj
-        killWolf w = if wolfId w == wolfId then w { wolfDead = True } else w
+        objWolfId = objId obj
+        killWolf w = if wolfId w == objWolfId then w { wolfDead = True } else w
         updatedWolfGame = fightGame { gameWolves = map killWolf (gameWolves fightGame) }
-    updatedGame <- fightLoop updatedWolfGame obj 10
-    return updatedGame
+    fightLoop updatedWolfGame obj 10
+
+fightLoop :: Game -> Object -> Life -> IO Game
+fightLoop game@Game{gameLocation = location, gameCharacter = character, gameInventory = inv, gameObjects = objList} object enemyHP = do
+    putStrLn ("________________________________________________________________________________")
+    putStrLn ("________________________________________________________________________________\n")
+    ascii (locA location)
+
+    putStrLn ("                    You are fighting a " ++ (getObjStr object))
+    putStrLn ("\n                    " ++ locD location ++ "\n\n")
+    putStrLn ("\nYour Atk: " ++ show(getAtk character))
+    putStrLn ("Your Def: " ++ show(getDef character))
+    putStrLn ("\nYour HP:  " ++ show(getHP character) ++ " [" ++ (drawBar (getHP character) 10) ++ "]")
+    putStrLn ("Your Steps:   "  ++ show(getSteps character))
+    putStrLn ("\nHP of the " ++ (getObjStr object) ++ ": " ++ show(enemyHP) ++ " [" ++ (drawBar enemyHP 30) ++ "]")
+    putStrLn ("\n\nYou can 'attack' or try to 'flee'..\n What will u do?")
+    putStrLn ("________________________________________________________________________________")
+    putStrLn ("________________________________________________________________________________")
+    
+    input <- getLine
+    
+    let randVal = 0
+        newEnemyHP = enemyHP - (getAtk character + randVal)
+    if (newEnemyHP <= 0) then do
+        putStrLn ("You Won! Press 'Enter' to continue")
+        _ <- getLine
+        let updatedObjList = attackObj object objList
+        return game { gameObjects = updatedObjList }
+    else if input `elem` quitFight
+        then return game
+        else fightLoop game object newEnemyHP
 
 gameLoop :: Game -> IO ()
 gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInventory = inv, gameObjects = objList, gameWolves = wolves} = do
@@ -80,9 +117,13 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
 
     ascii (locA location)
     putStr ("                    You are in " )
-    bold (locS location)
+    setSGR [SetConsoleIntensity BoldIntensity]
+    putStr (locS location)
+    setSGR [Reset]
     putStr ("\n                    You are " )
-    bold (getString character)
+    setSGR [SetConsoleIntensity BoldIntensity]
+    putStr (getString character)
+    setSGR [Reset]
     putStrLn ("\n                    " ++ locD location ++ "\n\n")
     
     if checkEncounter location wolves
@@ -113,7 +154,7 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
             putStrLn "Game Over."
         else do
             if input `elem` quitCharacter
-                then putStrLn "Bye!"
+                then putStrLn "Bye!" >> gameLoop game
                 else do
                     let splitInput = splitString input
                         actionStr = head splitInput
@@ -133,50 +174,22 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
                                     case gamePrincess game of
                                         PrincessDead -> putStrLn "The princess is already dead. You failed to save her.\n"
                                         PrincessSaved -> putStrLn "The princess is already saved.\n"
-                                        PrincessAlive -> handlePrincessSave game
-                                "take" | actioBool -> handleTake game obj
-                                "activate" | actioBool -> handleActivate game obj
-                                "attack" | actioBool -> handleFight game obj
-                                "fight" | actioBool -> handleFight game obj
-                                _ -> doNothinSimple obj >> return game
+                                        PrincessAlive -> void $ handlePrincessSave game
+                                "take" | actioBool -> void $ handleTake game obj
+                                "activate" | actioBool -> void $ handleActivate game obj
+                                "attack" | actioBool -> void $ handleFight game obj
+                                "fight" | actioBool -> void $ handleFight game obj
+                                _ -> doNothinSimple obj
                             if input `elem` invActions
-                                then showInventory inv >> return game
+                                then showInventory inv
                                 else return ()
                             if actionStr `elem` changinAction && actioBool && actionStr `elem` ["attack", "fight"]
-                                then return () -- Handled above
-                                else handleMovement game input
-                        Nothing -> handleMovement game input
-                    >>= gameLoop
+                                then return ()
+                                else handleMovement game input >>= gameLoop
+                        Nothing -> handleMovement game input >>= gameLoop
 
-fightLoop :: Game -> Object -> Life -> IO Game
-fightLoop game@Game{gameLocation = location, gameCharacter = character, gameInventory = inv, gameObjects = objList} object enemyHP = do
-    putStrLn ("________________________________________________________________________________")
-    putStrLn ("________________________________________________________________________________\n")
-    ascii (locA location)
-
-    putStrLn ("                    You are fighting a " ++ (getObjStr object))
-    putStrLn ("\n                    " ++ locD location ++ "\n\n")
-    putStrLn ("\nYour Atk: " ++ show(getAtk character))
-    putStrLn ("Your Def: " ++ show(getDef character))
-    putStrLn ("Your HP:  " ++ show(getHP character))
-    putStrLn ("Your Steps:   "  ++ show(getSteps character))
-    putStrLn ("\nHP of the " ++ (getObjStr object) ++ ": " ++ show(enemyHP))
-    putStrLn ("\n\nYou can 'attack' or try to 'flee'..\n What will u do?")
-    putStrLn ("________________________________________________________________________________")
-    putStrLn ("________________________________________________________________________________")
-    
-    input <- getLine
-    
-    let randVal = 0
-        newEnemyHP = enemyHP - (getAtk character + randVal)
-    if (newEnemyHP <= 0) then do
-        putStrLn ("You Won! Press 'Enter' to continue")
-        _ <- getLine
-        let updatedObjList = attackObj object objList
-        return game { gameObjects = updatedObjList }
-    else if input `elem` quitFight
-        then return game
-        else fightLoop game object newEnemyHP
+void :: IO a -> IO ()
+void x = x >> return ()
 
 game :: IO ()
 game = do
