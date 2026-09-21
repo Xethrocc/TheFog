@@ -149,7 +149,7 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
                             if actionStr `elem` changinAction && actioBool
                                 then void $ handleFight game obj
                                 else handleMovement game input >>= gameLoop
-                        Nothing -> handleMovement game input >>= gameLoop
+                        Nothing -> if input `elem` alldir then handleMovement game input >>= gameLoop else putStrLn "Unknown command." >> gameLoop game
 
 void :: IO a -> IO ()
 void x = x >> return ()
