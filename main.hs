@@ -235,7 +235,7 @@ gameLoop' game@Game{gameLocation = location, gameCharacter = character, gameInve
     input <- getLine
 
     if checkEnding (gameShrineFlags game)
-        then printVictory game
+        then fogEnding
         else processInput game input
 
 -- (Fix 7/17) Eingabe-Verarbeitung in klarer Reihenfolge:
@@ -281,7 +281,7 @@ performAction game actionStr obj
         "activate" -> do
             g <- handleActivate game obj
             if checkEnding (gameShrineFlags g)
-                then printVictory g   -- (Fix 12) alle 4 Shrines = Sieg
+                then fogEnding   -- (Original-Design) alle 4 Shrines = der Nebel senkt sich
                 else gameLoop g
         "attack" -> handleFight game obj >>= gameLoop
         "fight" -> handleFight game obj >>= gameLoop
@@ -310,18 +310,13 @@ performAction game actionStr obj
             pause
             gameLoop g
 
--- (Fix 12) Sieg statt "Game Over", wenn alle vier Schreine aktiviert sind
-printVictory :: Game -> IO ()
-printVictory game = do
-    putStrLn ""
-    putStrLn "The four shrines pulse in unison! A bright light breaks through the fog..."
-    putStrLn "Slowly the fog recedes and the land can breathe freely again."
-    case gamePrincess game of
-        PrincessSaved -> putStrLn "And the princess you rescued will tell everyone of your heroism."
-        PrincessDead  -> putStrLn "But the princess is lost forever - not every story ends well."
-        PrincessAlive -> putStrLn "Somewhere by the river, a princess is still waiting to be saved..."
-    putStrLn ""
-    putStrLn "                    *** VICTORY ***"
+-- (Original-Design, wie in thefog.yaml engine-seitig) Alle vier Shrines
+-- aktiv = der Nebel senkt sich endgueltig uebers Land -> Game Over.
+fogEnding :: IO ()
+fogEnding = do
+    putStrLn "The fog descends over the land..."
+    putStrLn "Wolves grow stronger, guards fall, the world becomes hostile..."
+    putStrLn "Game Over."
 
 game :: IO ()
 game = do
