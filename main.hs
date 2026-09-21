@@ -12,7 +12,6 @@ main :: IO ()
 main = do
   game
 
--- Handle player movement and return new game state
 handleMovement :: Game -> String -> IO Game
 handleMovement game direction = do
     let nextLocId = fromMaybe (locId (gameLocation game)) (locI (stringToDirection direction) (gameLocation game))
@@ -25,7 +24,6 @@ handleMovement game direction = do
         putStrLn ""
     return game { gameLocation = gameMap !! nextLocId, gameWolves = wolvesWithNew, gameStepCounter = newStep }
 
--- Handle save/help action for princess
 handlePrincessSave :: Game -> IO Game
 handlePrincessSave game = do
     let stepMod = gameStepCounter game `mod` 3
@@ -35,7 +33,6 @@ handlePrincessSave game = do
     putStrLn (snd result)
     return game { gamePrincess = fst result }
 
--- Handle shrine activation
 handleActivate :: Game -> Object -> IO Game
 handleActivate game obj = do
     let hasCrystal = isInInv obj (filter (\t -> objId t == 4) (gameInventory game))
@@ -56,7 +53,6 @@ handleActivate game obj = do
             putStrLn ""
         return game
 
--- Handle take/pick action
 handleTake :: Game -> Object -> IO Game
 handleTake game obj = do
     let (updatedObjList, updatedInv) = takeObj obj (gameObjects game) (gameInventory game)
@@ -67,13 +63,15 @@ handleTake game obj = do
         putStrLn ""
     return game { gameObjects = updatedObjList, gameInventory = updatedInv }
 
--- Handle combat
 handleFight :: Game -> Object -> IO Game
 handleFight game obj = do
     let fightGame = game { gameLocation = Location { locId = 54, locName = "Wolf-Fight", locExits = [] } }
-    fightLoop fightGame obj 10
+        wolfId = objId obj
+        killWolf w = if wolfId w == wolfId then w { wolfDead = True } else w
+        updatedWolfGame = fightGame { gameWolves = map killWolf (gameWolves fightGame) }
+    updatedGame <- fightLoop updatedWolfGame obj 10
+    return updatedGame
 
--- Main game loop
 gameLoop :: Game -> IO ()
 gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInventory = inv, gameObjects = objList, gameWolves = wolves} = do
     setTitle ("THE FOG - " ++ (locS location))
@@ -87,7 +85,6 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
     bold (getString character)
     putStrLn ("\n                    " ++ locD location ++ "\n\n")
     
-    -- Check for wolf encounter
     if checkEncounter location wolves
         then do
             setSGR [SetColor Foreground Vivid Red]
@@ -109,7 +106,6 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
     putStrLn ("________________________________________________________________________________")
     input <- getLine
     
-    -- Check ending condition
     if checkEnding (gameShrineFlags game)
         then do
             putStrLn "The fog descends over the land..."
@@ -137,22 +133,20 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
                                     case gamePrincess game of
                                         PrincessDead -> putStrLn "The princess is already dead. You failed to save her.\n"
                                         PrincessSaved -> putStrLn "The princess is already saved.\n"
-                                        PrincessAlive -> void $ handlePrincessSave game
-                                "take" | actioBool -> void $ handleTake game obj
-                                "activate" | actioBool -> void $ handleActivate game obj
-                                "attack" | actioBool -> void $ handleFight game obj
-                                "fight" | actioBool -> void $ handleFight game obj
-                                _ -> doNothinSimple obj
+                                        PrincessAlive -> handlePrincessSave game
+                                "take" | actioBool -> handleTake game obj
+                                "activate" | actioBool -> handleActivate game obj
+                                "attack" | actioBool -> handleFight game obj
+                                "fight" | actioBool -> handleFight game obj
+                                _ -> doNothinSimple obj >> return game
                             if input `elem` invActions
-                                then showInventory inv
+                                then showInventory inv >> return game
                                 else return ()
-                            if actionStr `elem` changinAction && actioBool
-                                then void $ handleFight game obj
-                                else handleMovement game input >>= gameLoop
-                        Nothing -> if input `elem` alldir then handleMovement game input >>= gameLoop else putStrLn "Unknown command." >> gameLoop game
-
-void :: IO a -> IO ()
-void x = x >> return ()
+                            if actionStr `elem` changinAction && actioBool && actionStr `elem` ["attack", "fight"]
+                                then return () -- Handled above
+                                else handleMovement game input
+                        Nothing -> handleMovement game input
+                    >>= gameLoop
 
 fightLoop :: Game -> Object -> Life -> IO Game
 fightLoop game@Game{gameLocation = location, gameCharacter = character, gameInventory = inv, gameObjects = objList} object enemyHP = do
@@ -179,12 +173,11 @@ fightLoop game@Game{gameLocation = location, gameCharacter = character, gameInve
         putStrLn ("You Won! Press 'Enter' to continue")
         _ <- getLine
         let updatedObjList = attackObj object objList
-        return game { gameLocation = gameLocation game, gameObjects = updatedObjList }
+        return game { gameObjects = updatedObjList }
     else if input `elem` quitFight
         then return game
         else fightLoop game object newEnemyHP
 
--- starts the game loop with the initial Game
 game :: IO ()
 game = do
     putStrLn ("Whats Your (Character) Name?")
