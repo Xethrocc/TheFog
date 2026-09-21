@@ -18,7 +18,7 @@ drawBar current maxHP
     | otherwise =
         let filled = min 10 (current * 10 `div` maxHP)
             empty = 10 - filled
-        in (replicate filled '|') ++ (replicate empty ' ')
+        in (replicate filled '£') ++ (replicate empty ' ')
 
 handleMovement :: Game -> String -> IO Game
 handleMovement game direction = do
