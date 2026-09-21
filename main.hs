@@ -81,11 +81,20 @@ maybeBite game
             else return game
     | otherwise = return game
 
+-- (AUTOR-DESIGN) Die Prinzessin überlebt die Rettung nur in 1/3 der Fälle
+-- (2/3 ertrinken). Bei Erfolg verschwindet sie aus der Objektliste; nach
+-- ihrem Tod bleibt sie liegen, weitere Rettungsversuche sind blockiert.
 handlePrincessSave :: Game -> Object -> IO Game
 handlePrincessSave game obj = do
-    putStrLn "You dive into the river and guide the princess to safety!\n"
-    return game { gamePrincess = PrincessSaved
-                , gameObjects = delete obj (gameObjects game) }
+    r <- roll 1 3
+    if r == (1 :: Int)
+        then do
+            putStrLn "You dive into the river and guide the princess to safety!\n"
+            return game { gamePrincess = PrincessSaved
+                        , gameObjects = delete obj (gameObjects game) }
+        else do
+            putStrLn "You tried to save the princess but she drowned!\n"
+            return game { gamePrincess = PrincessDead }
 
 -- (Fix 5) Crystal-Check korrigiert: es wird geprueft, ob ein Objekt mit
 -- objId 4 (Crystal) im Inventar liegt - nicht mehr, ob das Shrine-Objekt
