@@ -1,1 +1,7 @@
 .vscode/tasks.json
+fix-plan.md
+
+# Haskell build artifacts
+*.hi
+*.o
+dist-newstyle/

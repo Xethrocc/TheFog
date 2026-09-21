@@ -66,12 +66,15 @@ gameMap =
 -- Initial wolf positions with path indices
 -- Wolf 0: Guardian at Earth Shrine (loc 28) - stays put
 -- Wolf 1-3: Mobile wolves with their own paths
+-- (Fix 15) Pfade fuehren nur ueber tatsaechlich benachbarte Locations
+-- (gameMap-Exits), Startposition = path !! wolfPathIndex.
+-- Patrouillen-Woelfe: 12 HP (Waechter: 30) fuer ausgeglichene Kaempfe.
 initialWolves :: [Wolf]
 initialWolves =
   [ Wolf 0 28 [] 0 True 30 8 2 False
-  , Wolf 1 13 [12, 13, 14, 15, 16, 17, 18, 19, 20, 21] 1 False 30 8 2 False
-  , Wolf 2 17 [17, 18, 19, 20, 21, 22, 16, 15, 14, 13] 0 False 30 8 2 False
-  , Wolf 3 20 [20, 21, 22, 23, 20, 19, 18, 17, 12, 13] 2 False 30 8 2 False
+  , Wolf 1 13 [13,15,16,21,20,19,18,14] 0 False 12 8 2 False
+  , Wolf 2 17 [17,20,21,16,15,13,14,18,19,20] 0 False 12 8 2 False
+  , Wolf 3 23 [23,20,19,18,14,13,15,16,21,20] 0 False 12 8 2 False
   ]
 
 -- Spawn locations for new wolves after all shrines activated
@@ -108,7 +111,7 @@ objectList =
        ]
        
 objectText :: Array (ObjectID) String 
-objectText = array (0,13) [
+objectText = array (0,17) [
        ((0),(("           .-.---------------------------------------.-.  "
         ++ "\n          ((o))                                         ) "
         ++ "\n           \\U/_________          _______         ______/  "
@@ -160,7 +163,22 @@ objectText = array (0,13) [
         ++ "\n                       /y`        `+o-                                "
         ++ "\n                        `/++:--//+/`                                  "
         ++ "\n                            `..`                                      ")))),
-       ((13),"\n_____________________________________________________________________\n|               ---This is The Help Section---                      |\n| To move your Character type n,e,s,w or north, east, south, west   |\n| To use Objects type *Type of use* + Object for example 'read Help'| \n| Some objects have a special kind of use, some are just there.     |\n|                                                                   |\n| Possible Actions: examine, read, take, burn, attack/hit, show ... |\n|___________________________________________________________________|")
+       ((13),"\n_____________________________________________________________________\n|               ---This is The Help Section---                      |\n| To move your Character type n,e,s,w or north, east, south, west   |\n| To use Objects type *Type of use* + Object for example 'read Help'| \n| Some objects have a special kind of use, some are just there.     |\n|                                                                   |\n| Possible Actions: examine, read, take, burn, attack/hit, show ... |\n|___________________________________________________________________|"),
+       ((2),"It's an Apple from your Appletree. A healthy snack for the road."),
+       ((3),"A simple wooden shield. If you 'take' it, it might protect you."),
+       ((4),"A slightly glowing Crystal. According to the prophecy it can activate the shrines of the four elements."),
+       ((5),"A stone fountain, the Water-Shrine. The prophecy says the magic Crystal can 'activate' it."),
+       ((6),"A burning pillar, the Fire-Shrine. The prophecy says the magic Crystal can 'activate' it."),
+       ((7),"A big Shrine made of marble, the Air-Shrine. The prophecy says the magic Crystal can 'activate' it."),
+       ((8),"A simple shrine made of wood, the Earth-Shrine. The prophecy says the magic Crystal can 'activate' it."),
+       ((9),"The Sword Of A Thousand Truths. It radiates an old and powerful magic."),
+       ((10),"A dark Wolf with glowing eyes. It watches your every move. Maybe you can 'attack' him.."),
+       ((11),"The Princess of the castle! She fell into the river and is about to drown. Try to 'save' her!"),
+       ((12),"Nothing special to see here."),
+       ((14),"The Water-Shrine is activated. Water flows calmly over its rim."),
+       ((15),"The Fire-Shrine is activated. Its flames burn steady and bright."),
+       ((16),"The Air-Shrine is activated. A soft wind swirls around it."),
+       ((17),"The Earth-Shrine is activated. The ground beneath it hums gently.")
   ]
         
 descr :: Array (Int) String 

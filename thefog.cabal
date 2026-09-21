@@ -10,6 +10,12 @@ build-type:         Simple
 
 executable thefog
     main-is:          main.hs
+    other-modules:    Ascii,
+                      GameActions,
+                      GameConstants,
+                      GameData,
+                      GameTypes,
+                      GameUtils
     build-depends:    base ^>=4.18,
                       array,
                       mtl,

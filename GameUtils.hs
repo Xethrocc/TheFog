@@ -1,11 +1,11 @@
 module GameUtils where
 
 import Data.Array
+import Data.Char (isSpace)
 import Data.List
 import Data.Maybe
 import GameTypes
 import GameData
-import System.Random (StdGen, newStdGen, randomR)
 
 
 -- Helper functions for Location
@@ -21,20 +21,8 @@ locI targetDir loc = find (\(locId', dir) -> dir == targetDir) (locExits loc) >>
 locA :: Location -> Int
 locA = locId
 
-getObjPos :: Object -> Int
-getObjPos = objPos
-
-getObjID :: Object -> ObjectID
-getObjID = objId
-
 getObjStr :: Object -> ObjString
 getObjStr = objName
-
-getObjDes :: Object -> ObjDescri
-getObjDes = objDescription
-
-getObjActions :: Object -> PossibleActions
-getObjActions = objActions
 
 isActionPossible :: String -> Object -> Bool
 isActionPossible x obj = x `elem` objActions obj
@@ -69,8 +57,9 @@ getWolfHere (w:ws) loc = obj ++ (getWolfHere ws loc)
                                    (wolfIdToName (wolfId w)) ++ "\n" else ""
 
 wolfIdToName :: Int -> String
+-- (Fix 23) Wölfe unterscheidbar benennen
 wolfIdToName 0 = "Wolf (Guardian)"
-wolfIdToName _ = "Patrolling Wolf"
+wolfIdToName n = "Patrolling Wolf #" ++ show n
 
 -- Find an object by a string (also searches wolves)
 getObject :: String -> ObjectList -> [Wolf] -> Maybe Object
@@ -80,10 +69,11 @@ getObject x objList wolves =
         Nothing -> findWolfByName x wolves
 
 getObjectInList :: String -> ObjectList -> Maybe Object
+-- (Fix 8) Nur echter Namens-Match; Woelfe werden ausschliesslich ueber
+-- findWolfByName (Fallthrough in getObject) gefunden. Vorher matchte
+-- "wolf" das ERSTE Objekt der Liste (= Paper).
 getObjectInList _ []     = Nothing
-getObjectInList x (y:ys) = if (x == objName y || x `elem` ["wolf", "wolves"]) 
-                           then Just y 
-                           else getObjectInList x ys
+getObjectInList x (y:ys) = if x == objName y then Just y else getObjectInList x ys
 
 -- Helper to check if string matches a wolf
 wolfMatch :: String -> Wolf -> Bool
@@ -123,44 +113,17 @@ getHP :: Character -> Life
 getHP = charLife
 
 giveName :: String -> Character
-giveName x = Character { charName = x, charSteps = 0, charAttack = 1, charDefense = 1, charLife = 10 }
+-- (Fix 24) Leere/Whitespace-Namen bekommen den Standardnamen "Hero"
+giveName x = Character { charName = if all isSpace x then "Hero" else x
+                       , charSteps = 0, charAttack = 2, charDefense = 1, charLife = 10 }
 
+-- (Fix 20) Wird in handleMovement aufgerufen, damit der Steps-Zaehler stimmt
 addSteps :: Character -> Character
 addSteps char = char { charSteps = charSteps char + 1 }
 
 addAng :: Inventory -> Character -> Character
-addAng inv char = char
+-- (Fix 9/20) Schwert (objId 9) im Inventar erhoehht den Angriff
+addAng inv char = if any (\obj -> objId obj == 9) inv then char { charAttack = 10 } else char
 
 addDef :: Inventory -> Character -> Character
 addDef inv char = if any (\obj -> objId obj == 3) inv then char { charDefense = 10 } else char
-
-shouldWaitForEnter :: String -> [String] -> Bool
-shouldWaitForEnter input allowedDirections = not (input `elem` allowedDirections)
-
-selsort :: (Eq a,Ord a) => [a] -> [a]
-selsort [] = []
-selsort xs = let 
-               min  = minimum xs
-               rest = delete min xs
-             in
-               min : selsort rest  
-
-qsort :: (Eq a,Ord a) => [a] -> [a]
-qsort [] = []
-qsort (x:xs) = let
-                min  = qsort [m | m <- (x:xs), m <  x]
-                same =       [m | m <- (x:xs), m == x]
-                max  = qsort [m | m <- (x:xs), m >  x] 
-               in
-                min ++ same ++ max   
-                
-random :: StdGen -> (Int, StdGen)
-random gen = randomR (1, 10) gen
-
-randomObj :: StdGen -> ObjectList -> Object -> (ObjectList, StdGen)
-randomObj gen oLs obj = (obj { objPos = newPos } : oLs, newGen)
-  where
-    (newPos, newGen) = randomR (0, 54) gen
-
-randText :: Int -> String -> IO()
-randText int y = if (int > 5) then putStrLn ("You "++ y ++"ed it") else putStrLn ("That was not working.. try again")
