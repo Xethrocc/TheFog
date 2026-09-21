@@ -98,7 +98,7 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
 
     putStrLn ("Usable Objects:\n")
     setSGR [SetColor Foreground Vivid Red]
-    putStrLn (getObjHere objList location)
+    putStrLn (getObjHere objList wolves location)
     setSGR [SetConsoleIntensity BoldIntensity,SetColor Foreground Vivid Green]
     putStrLn ("\nYour Attack:  " ++ show(getAtk character))
     putStrLn ("Your Defense: " ++ show(getDef character))
@@ -122,8 +122,8 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
                     let splitInput = splitString input
                         actionStr = head splitInput
                         objectName = last splitInput
-                        allObjects = objList ++ inv
-                        targetObject = getObject objectName allObjects
+                        allObjects = objList
+                        targetObject = getObject objectName allObjects wolves
                     
                     case targetObject of
                         Just obj -> do
@@ -140,6 +140,8 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
                                         PrincessAlive -> void $ handlePrincessSave game
                                 "take" | actioBool -> void $ handleTake game obj
                                 "activate" | actioBool -> void $ handleActivate game obj
+                                "attack" | actioBool -> void $ handleFight game obj
+                                "fight" | actioBool -> void $ handleFight game obj
                                 _ -> doNothinSimple obj
                             if input `elem` invActions
                                 then showInventory inv
