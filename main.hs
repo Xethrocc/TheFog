@@ -5,17 +5,15 @@ import GameData
 import GameActions
 import GameUtils
 import GameConstants
-import System.Random (StdGen, newStdGen, randomR)
 import Control.Monad (when)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 
 main :: IO ()
 main = do
   game
 
-gameLoop :: Game -> IO Game
-gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInventory = inv, gameObjects = objList} = do
-    gen <- newStdGen -- Get a new StdGen for each loop iteration
+gameLoop :: Game -> IO ()
+gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInventory = inv, gameObjects = objList, gameStepCounter = step, gameWolves = wolves, gameShrineFlags = flags, gamePrincess = princess} = do
     setTitle ("THE FOG - " ++ (locS location))
     putStrLn ("________________________________________________________________________________")
     putStrLn ("________________________________________________________________________________\n")
@@ -26,6 +24,15 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
     putStr ("\n                    You are " )
     bold (getString character)
     putStrLn ("\n                    " ++ locD location ++ "\n\n")
+    
+    -- Check for wolf encounter
+    if checkEncounter location wolves
+        then do
+            setSGR [SetColor Foreground Vivid Red]
+            putStrLn "WARNING: A wolf is nearby!"
+            setSGR [Reset]
+            putStrLn ""
+        else putStrLn ""
     putStrLn ("Usable Objects:\n")
     setSGR [SetColor Foreground Vivid Red]
     putStrLn (getObjHere objList location)
@@ -38,79 +45,106 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
     putStrLn ("________________________________________________________________________________")
     putStrLn ("________________________________________________________________________________")
     input <- getLine
+    
     let newCharacterWithSteps = addSteps character
         defenseChar           = addDef inv newCharacterWithSteps
         attackChar            = addAng inv defenseChar
         splitInput            = splitString input
         actionStr             = head splitInput
         objectName            = last splitInput
-        
-        (randVal, newGen)     = random gen -- Get a random value and new generator
+    
+    -- Check ending condition
+    if checkEnding flags
+        then do
+            putStrLn "The fog descends over the land..."
+            putStrLn "Wolves grow stronger, guards fall, the world becomes hostile..."
+            putStrLn "Game Over."
+        else
+            case getObject objectName (objList ++ inv) of
+                Just targetObject -> do
+                    let isActionPossible' = isActionPossible actionStr targetObject
+                        isObjHere'        = isObjHere targetObject location
+                        actioBool         = isActionPossible' && isObjHere'
 
-    case getObject objectName (objList ++ inv) of
-        Just targetObject -> do
-            let isActionPossible' = isActionPossible actionStr targetObject
-                isObjHere'        = isObjHere targetObject location
-                actioBool         = isActionPossible' && isObjHere'
-
-            if input `elem` quitCharacter
-                then return game
-                else do
-                    case actionStr of
-                        "read" | actioBool -> readObj targetObject
-                        "examine" | actioBool -> examineObj targetObject
-                        _ -> doNothinSimple targetObject
-
-                    if input `elem` invActions
-                        then showInventory inv
-                        else putStrLn ""
-
-                    if actionStr `elem` changinAction && actioBool
-                        then do
-                            randText randVal actionStr
-                            when (shouldWaitForEnter actionStr alldir) $ do
-                                putStrLn "Press 'Enter' to continue."
-                                _ <- getLine
-                                putStrLn ""
-                            fightLoop game { gameLocation = Location { locId = 54, locName = "Wolf-Fight", locExits = [] }, gameCharacter = attackChar, gameInventory = inv, gameObjects = objList } targetObject 10 newGen
-                        else if actionStr == "activate" && actioBool
-                            then do
-                                putStrLn "You activated it\n"
-                                when (shouldWaitForEnter actionStr alldir) $ do
-                                    putStrLn "Press 'Enter' to continue."
-                                    _ <- getLine
-                                    putStrLn ""
-                                let updatedObjList = activateObj targetObject objList inv
-                                gameLoop game { gameLocation = location, gameCharacter = attackChar, gameInventory = inv, gameObjects = updatedObjList }
-                        else if actionStr `elem` ["take","pick"] && actioBool
-                            then do
-                                putStrLn "You picked it up, it's in your Inventory\n"
-                                when (shouldWaitForEnter actionStr alldir) $ do
-                                    putStrLn "Press 'Enter' to continue."
-                                    _ <- getLine
-                                    putStrLn ""
-                                let (updatedObjList, updatedInv) = takeObj targetObject objList inv
-                                gameLoop game { gameLocation = location, gameCharacter = attackChar, gameInventory = updatedInv, gameObjects = updatedObjList }
+                    if input `elem` quitCharacter
+                        then putStrLn "Bye!"
                         else do
-                            let nextLocId = fromMaybe (locId location) (locI (stringToDirection input) location)
-                            when (shouldWaitForEnter actionStr alldir) $ do
-                                putStrLn "Press 'Enter' to continue."
-                                _ <- getLine
-                                putStrLn ""
-                            gameLoop game { gameLocation = gameMap !! nextLocId, gameCharacter = attackChar, gameInventory = inv, gameObjects = objList }
-        Nothing -> do
-            let nextLocId = fromMaybe (locId location) (locI (stringToDirection input) location)
-            when (shouldWaitForEnter actionStr alldir) $ do
-                putStrLn "Press 'Enter' to continue."
-                _ <- getLine
-                putStrLn ""
-            gameLoop game { gameLocation = gameMap !! nextLocId, gameCharacter = attackChar, gameInventory = inv, gameObjects = objList }
+                            case actionStr of
+                                "read" | actioBool -> readObj targetObject
+                                "examine" | actioBool -> examineObj targetObject
+                                "save" | actioBool -> do
+                                    case princess of
+                                        PrincessDead -> putStrLn "The princess is already dead. You failed to save her.\n"
+                                        PrincessSaved -> putStrLn "The princess is already saved.\n"
+                                        PrincessAlive -> do
+                                            let randStep = step `mod` 3
+                                            if randStep == 0 
+                                                then putStrLn "You tried to save the princess but she drowned!\n"
+                                                else putStrLn "You guided the princess to safety!\n"
+                                            let newPrincess = if randStep == 0 then PrincessDead else PrincessSaved
+                                            gameLoop game { gamePrincess = newPrincess, gameStepCounter = step + 1 }
+                                "take" | actioBool -> do
+                                    putStrLn "You picked it up, it's in your Inventory\n"
+                                    when (shouldWaitForEnter actionStr alldir) $ do
+                                        putStrLn "Press 'Enter' to continue."
+                                        _ <- getLine
+                                        putStrLn ""
+                                    let (updatedObjList, updatedInv) = takeObj targetObject objList inv
+                                    gameLoop game { gameObjects = updatedObjList, gameInventory = updatedInv, gameStepCounter = step + 1 }
+                                "activate" | actioBool -> do
+                                    if isInInv targetObject (filter (\t -> objId t == 4) inv) then do
+                                        putStrLn "You activated it!\\n"
+                                        when (shouldWaitForEnter actionStr alldir) $ do
+                                            putStrLn "Press 'Enter' to continue."
+                                            _ <- getLine
+                                            putStrLn ""
+                                        let updatedObjList = activateObj targetObject objList inv
+                                        let updatedFlags = updateShrineFlags targetObject flags
+                                        gameLoop game { gameObjects = updatedObjList, gameShrineFlags = updatedFlags, gameStepCounter = step + 1 }
+                                    else do
+                                        putStrLn "You need the Crystal to activate this shrine.\\n"
+                                        when (shouldWaitForEnter actionStr alldir) $ do
+                                            putStrLn "Press 'Enter' to continue."
+                                            _ <- getLine
+                                            putStrLn ""
+                                        gameLoop game { gameStepCounter = step + 1 }
+                                _ -> doNothinSimple targetObject
 
+                            if input `elem` invActions
+                                then showInventory inv
+                                else putStrLn ""
 
-fightLoop :: Game -> Object -> Life -> StdGen -> IO Game
-fightLoop game@Game{gameLocation = location, gameCharacter = character, gameInventory = inv, gameObjects = objList} object enemyHP gen = do
-    let (randVal, newGen) = random gen
+                            if actionStr `elem` changinAction && actioBool
+                                then do
+                                    let randVal = step `mod` 10
+                                    randText randVal actionStr
+                                    when (shouldWaitForEnter actionStr alldir) $ do
+                                        putStrLn "Press 'Enter' to continue."
+                                        _ <- getLine
+                                        putStrLn ""
+                                    updatedGame <- fightLoop game { gameLocation = Location { locId = 54, locName = "Wolf-Fight", locExits = [] }, gameCharacter = attackChar, gameInventory = inv, gameObjects = objList, gameStepCounter = step, gameWolves = wolves, gameShrineFlags = flags, gamePrincess = princess } targetObject 10
+                                    gameLoop updatedGame
+                                else do
+                                    let nextLocId = fromMaybe (locId location) (locI (stringToDirection input) location)
+                                    when (shouldWaitForEnter actionStr alldir) $ do
+                                        putStrLn "Press 'Enter' to continue."
+                                        _ <- getLine
+                                        putStrLn ""
+                                    let newStep = step + 1
+                                        newWolves = moveWolves newStep wolves
+                                    gameLoop game { gameLocation = gameMap !! nextLocId, gameCharacter = attackChar, gameInventory = inv, gameObjects = objList, gameStepCounter = newStep, gameWolves = newWolves }
+                Nothing -> do
+                    let nextLocId = fromMaybe (locId location) (locI (stringToDirection input) location)
+                    when (shouldWaitForEnter actionStr alldir) $ do
+                        putStrLn "Press 'Enter' to continue."
+                        _ <- getLine
+                        putStrLn ""
+                    let newStep = step + 1
+                        newWolves = moveWolves newStep wolves
+                    gameLoop game { gameLocation = gameMap !! nextLocId, gameCharacter = attackChar, gameInventory = inv, gameObjects = objList, gameStepCounter = newStep, gameWolves = newWolves }
 
+fightLoop :: Game -> Object -> Life -> IO Game
+fightLoop game@Game{gameLocation = location, gameCharacter = character, gameInventory = inv, gameObjects = objList} object enemyHP = do
     putStrLn ("________________________________________________________________________________")
     putStrLn ("________________________________________________________________________________\n")
     ascii (locA location)
@@ -128,23 +162,23 @@ fightLoop game@Game{gameLocation = location, gameCharacter = character, gameInve
     
     input <- getLine
     
-    let newEnemyHP = enemyHP - (getAtk character + randVal)
+    let randVal = 0  -- Use step counter instead
+        newEnemyHP = enemyHP - (getAtk character + randVal)
     if (newEnemyHP <= 0) then do
         putStrLn ("You Won! Press 'Enter' to continue")
         _ <- getLine
         let updatedObjList = attackObj object objList
-        gameLoop game { gameLocation = gameLocation game, gameCharacter = character, gameInventory = inv, gameObjects = updatedObjList }
+        return game { gameLocation = gameLocation game, gameCharacter = character, gameInventory = inv, gameObjects = updatedObjList }
     else if input `elem` quitFight
-        then gameLoop game { gameLocation = gameLocation game, gameCharacter = character, gameInventory = inv, gameObjects = objList }
-        else fightLoop game object newEnemyHP newGen
+        then return game
+        else fightLoop game object newEnemyHP
 
 -- starts the game loop with the initial Game
 game :: IO ()
 game = do
     putStrLn ("Whats Your (Character) Name?")
     charName <- getLine
-    initialGen <- newStdGen
-    gameLoop Game { gameLocation = gameMap !! 53, gameCharacter = giveName charName, gameInventory = [], gameObjects = objectList }
+    gameLoop Game { gameLocation = gameMap !! 53, gameCharacter = giveName charName, gameInventory = [], gameObjects = objectList, gameStepCounter = 0, gameWolves = initialWolves, gameShrineFlags = initialShrineFlags, gamePrincess = initialPrincessStatus }
     return ()
 
 stringToDirection :: String -> Direction
@@ -156,13 +190,10 @@ stringToDirection s
     | s `elem` secret = SE
     | otherwise = error "Invalid direction string"
 
+checkEnding :: (Bool, Bool, Bool, Bool) -> Bool
+checkEnding (e, w, f, a) = e && w && f && a
+
 -- input that exits the game
 
 
-
-
 -- ------------------- GAME ---------------------
-
-
-
-

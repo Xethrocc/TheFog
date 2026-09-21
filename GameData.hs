@@ -63,6 +63,24 @@ gameMap =
        Location {locId = 54, locName = "Wolf-Fight", locExits = []}
  ]
 
+-- Initial wolf positions
+-- Wolf 0: Guardian at Earth Shrine (loc 28)
+-- Wolf 1, 2, 3: Mobile wolves in the forest (starting positions)
+initialWolves :: [Wolf]
+initialWolves =
+  [ Wolf 0 28 True   -- Guardian wolf at Earth Shrine
+  , Wolf 1 13 False  -- Mobile wolf in forest
+  , Wolf 2 17 False  -- Mobile wolf near shrine
+  , Wolf 3 20 False  -- Mobile wolf deep in forest
+  ]
+
+-- Initial shrine flags (all inactive)
+initialShrineFlags :: (Bool, Bool, Bool, Bool)
+initialShrineFlags = (False, False, False, False)  -- Earth, Water, Fire, Air
+
+-- Initial princess status
+initialPrincessStatus :: PrincessStatus
+initialPrincessStatus = PrincessAlive
 
 objectList :: ObjectList
 objectList = 
@@ -201,6 +219,13 @@ descr = array (0,54) distances where
                ((52),"You are standing on a small floating island. in front of you is a marble shrine, a big symbol on it. \nIt looks like it changes with every gust of wind."),
                ((53),"Welcome to ~~The Fog~~ To enter the game enter 'game' \n\n                    For a little help type 'read Help'"),
                ((54),">>You are in a Fight!<<")  
-                ]   
-        
-    
+                ]
+
+-- Wolf movement paths (predefined forest locations for mobile wolves)
+-- Mobile wolves cycle through these forest locations
+wolfForestPaths :: [[Int]]
+wolfForestPaths = [
+    [12, 13, 14, 15, 16, 17, 18, 19, 20, 21],  -- Wolf 1 path
+    [17, 18, 19, 20, 21, 22, 16, 15, 14, 13],  -- Wolf 2 path
+    [20, 21, 22, 23, 20, 19, 18, 17, 12, 13]   -- Wolf 3 path
+  ]
