@@ -2,40 +2,61 @@ module GameActions where
 
 import Data.List
 import Data.Maybe
-import qualified Data.Map as Map
 import Data.Array
 import GameTypes
 import GameData
-import GameUtils
 
--- Shrine Flag Helpers
-updateShrineFlags :: Object -> (Bool, Bool, Bool, Bool) -> (Bool, Bool, Bool, Bool)
-updateShrineFlags obj flags =
-    case objId obj of
-        5 -> setFlag 1 True flags -- Water
-        6 -> setFlag 2 True flags -- Fire
-        7 -> setFlag 3 True flags -- Air
-        8 -> setFlag 0 True flags -- Earth
-        _ -> flags
+-- Wolf movement function with path index tracking
+moveWolves :: Int -> [Wolf] -> [Wolf]
+moveWolves _ wolves = map moveWolf wolves
+  where
+    moveWolf w | wolfGuardian w || wolfDead w = w
+               | null (wolfPath w) = w
+               | otherwise = w { wolfPathIndex = newIndex, wolfLoc = nextLoc }
+              where
+                path = wolfPath w
+                currentIdx = wolfPathIndex w
+                newIndex = (currentIdx + 1) `mod` length path
+                nextLoc = path !! newIndex
 
-setFlag :: Int -> Bool -> (Bool, Bool, Bool, Bool) -> (Bool, Bool, Bool, Bool)
-setFlag 0 v (e, w, f, a) = (v, w, f, a)
-setFlag 1 v (e, w, f, a) = (e, v, f, a)
-setFlag 2 v (e, w, f, a) = (e, w, v, a)
-setFlag 3 v (e, w, f, a) = (e, w, f, v)
-setFlag _ _ f = f
+-- Check if player encounters a live wolf
+checkEncounter :: Location -> [Wolf] -> Bool
+checkEncounter loc = any (wolfFound loc)
+  where
+    wolfFound loc w = wolfLoc w == locId loc && not (wolfDead w)
 
--------- Aktionen ---------
+-- Check ending condition
+checkEnding :: (Bool, Bool, Bool, Bool) -> Bool
+checkEnding (e, w, f, a) = e && w && f && a
 
--- Nichts machen --
-doNothin :: Object -> ObjectList -> ObjectList
-doNothin x ys = ys
+-- Get wolf stats (affected by shrine activation)
+getWolfStats :: (Bool, Bool, Bool, Bool) -> (Int, Int, Int)
+getWolfStats flags = 
+    let multiplier = if checkEnding flags then 3 else 1
+        attackMult = if checkEnding flags then 2 else 1
+    in (30 * multiplier, 8 * attackMult, 2 * attackMult)
 
-doNothinSimple :: Object -> IO()
-doNothinSimple x = putStrLn ("")
+-- Add new wolves after fog descends
+spawnPostFogWolves :: [Wolf] -> (Bool, Bool, Bool, Bool) -> Int -> [Wolf]
+spawnPostFogWolves wolves flags step =
+    if checkEnding flags
+        then let baseId = 100
+                 locations = postFogWolfLocations
+                 baseStats = getWolfStats flags
+                 newWolf loc id = Wolf id loc [] 0 False 
+                                            (fst3 baseStats) (snd3 baseStats) (thd3 baseStats) False
+             in wolves ++ zipWith newWolf locations [baseId..baseId + length locations - 1]
+        else wolves
 
-doNothinExt :: Object -> ObjectList -> Inventory -> (ObjectList,Inventory)
-doNothinExt x y i = (y,i)
+-- Helper for triple tuples
+fst3 :: (a, b, c) -> a
+fst3 (x, _, _) = x
+
+snd3 :: (a, b, c) -> b
+snd3 (_, y, _) = y
+
+thd3 :: (a, b, c) -> c
+thd3 (_, _, z) = z
 
 -- Objekt untersuchen
 examineObj :: Object -> IO()
@@ -45,36 +66,33 @@ examineObj Object { objId = d} = putStrLn $ objectText ! d
 readObj :: Object -> IO()
 readObj Object { objId = b } = putStrLn $ objectText ! b
 
--- Objekt anbrennen/verbrennen
-burnObj :: Object -> ObjectList -> Int -> ObjectList
-burnObj obj objList randVal = newObj : delete obj objList
+-- Objekt angreifen
+attackObj :: Object -> ObjectList -> ObjectList
+attackObj obj objList = newObj : delete obj objList
                           where
-                           newObj = if (randVal > 5) then obj { objName = "burned-" ++ objName obj, objDescription = "It's the burned down " ++ objName obj, objActions = ["examine"] } else obj
+                           newObj = obj { objName = "dead-" ++ objName obj, objDescription = "It's the dead " ++ objName obj, objActions = ["examine"] }
 
--- Wolf movement function
--- Wolf movement function
-moveWolves :: Int -> [Wolf] -> [Wolf]
-moveWolves stepCount wolves = map moveWolf wolves
-  where
-    moveWolf w | wolfGuardian w = w  -- Guardian stays put
-               | otherwise = moveWolfOnPath w
-    moveWolfOnPath w = w { wolfLoc = getNextLoc (wolfLoc w) }
-    getNextLoc current = 
-        let pathList = findPath current
-            currentIndex = findPathIndex current
-            nextIndex = (currentIndex + 1) `mod` length pathList
-        in pathList !! nextIndex
-    findPath loc = head [ p | p <- wolfForestPaths, loc `elem` p ]
-    findPathIndex loc = 
-        case findIndex (\p -> loc `elem` p) wolfForestPaths of
-            Just i -> i
-            Nothing -> 0  -- Should not happen
+-- Nichts machen --
+doNothinSimple :: Object -> IO()
+doNothinSimple x = putStrLn ("")
 
--- Check if player encounters a wolf
-checkEncounter :: Location -> [Wolf] -> Bool
-checkEncounter loc = any wolfFound
-  where
-    wolfFound w = wolfLoc w == locId loc
+-- Shrine Flag Helpers
+updateShrineFlags :: Object -> (Bool, Bool, Bool, Bool) -> (Bool, Bool, Bool, Bool)
+updateShrineFlags obj flags =
+    case objId obj of
+        5 -> setFlag 1 True flags
+        6 -> setFlag 2 True flags
+        7 -> setFlag 3 True flags
+        8 -> setFlag 0 True flags
+        _ -> flags
+
+setFlag :: Int -> Bool -> (Bool, Bool, Bool, Bool) -> (Bool, Bool, Bool, Bool)
+setFlag 0 v (e, w, f, a) = (v, w, f, a)
+setFlag 1 v (e, w, f, a) = (e, v, f, a)
+setFlag 2 v (e, w, f, a) = (e, w, v, a)
+setFlag 3 v (e, w, f, a) = (e, w, f, v)
+setFlag _ _ f = f
+
 -- Objekt aktivieren                           
 activateObj :: Object -> ObjectList -> Inventory -> ObjectList
 activateObj obj objList inv = if isJust (find (\o -> objId o == 4) inv) then newObj : delete obj objList else objList
@@ -89,25 +107,10 @@ takeObj obj objList inv = (oL2,inv2)
                    inv2 | objId obj == 2 = obj { objActions = ["examine","consume","eat"] } : inv
                         | otherwise  = obj { objActions = ["examine"] } : inv
                    
--- Objekt angreifen
-attackObj :: Object -> ObjectList -> ObjectList
-attackObj obj objList = newObj : delete obj objList
-                          where
-                           newObj = obj { objName = "dead-" ++ objName obj, objDescription = "It's the dead " ++ objName obj, objActions = ["examine"] }
-                           
--- Prinzessin retten (deterministisch based on step counter mod logic)
-savePrincess :: Object -> ObjectList -> Int -> ObjectList
-savePrincess obj objList stepCounter = newObj : delete obj objList
-                          where
-                           result = stepCounter `mod` 3
-                           newObj = if result == 0 then obj { objName = "dead-" ++ objName obj, objDescription = "It's the dead " ++ objName obj, objActions = ["examine"] }
-                                  else if result == 1 then obj { objName = "saved-" ++ objName obj, objDescription = "It's the saved " ++ objName obj, objActions = ["examine"] }
-                                   else obj
-
 -- Das Inventar Anzeigen
 showInventory :: Inventory -> IO()
 showInventory []     = putStrLn ("Your Inventory is empty")
-showInventory inv = putStrLn (show(map getObjStr inv))
+showInventory inv = putStrLn (show(map (objName) inv))
 
 -- Nachsehen ob ein Objekt im Inventar ist
 isInInv :: Object -> Inventory -> Bool

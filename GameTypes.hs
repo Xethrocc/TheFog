@@ -46,23 +46,27 @@ type Ang   = Int
 type Def   = Int
 type Life  = Int
 
--- Princess status tracking
 data PrincessStatus = PrincessAlive | PrincessDead | PrincessSaved deriving (Eq,Show)
 
--- Wolf data tracking
 data Wolf = Wolf {
     wolfId :: Int,
     wolfLoc :: Int,
-    wolfGuardian :: Bool  -- True if this wolf is the shrine guardian
+    wolfPath :: [Int],
+    wolfPathIndex :: Int,
+    wolfGuardian :: Bool,
+    wolfHp :: Int,
+    wolfAttack :: Int,
+    wolfDefense :: Int,
+    wolfDead :: Bool
 } deriving (Eq,Show)
 
 data Game = Game {
-    gameLocation   :: Location,
-    gameCharacter  :: Character,
-    gameInventory  :: Inventory,
-    gameObjects    :: ObjectList,
-    gameStepCounter :: Int,        -- Deterministic random seed
-    gameWolves     :: [Wolf],      -- All wolves with current positions
-    gameShrineFlags :: (Bool, Bool, Bool, Bool), -- Earth, Water, Fire, Air
-    gamePrincess   :: PrincessStatus
+    gameLocation    :: Location,
+    gameCharacter   :: Character,
+    gameInventory   :: Inventory,
+    gameObjects     :: ObjectList,
+    gameStepCounter :: Int,
+    gameWolves      :: [Wolf],
+    gameShrineFlags :: (Bool, Bool, Bool, Bool),
+    gamePrincess    :: PrincessStatus
 } deriving (Eq, Show)
