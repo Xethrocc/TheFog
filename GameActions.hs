@@ -115,3 +115,6 @@ showInventory inv = putStrLn (show(map (objName) inv))
 -- Nachsehen ob ein Objekt im Inventar ist
 isInInv :: Object -> Inventory -> Bool
 isInInv obj inv = obj `elem` inv
+
+interactSword :: Object -> IO ()
+interactSword _ = putStrLn "Die Klinge des Schwertes leuchtet kurz auf, erlischt dann aber wieder."

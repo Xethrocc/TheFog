@@ -169,14 +169,20 @@ gameLoop game@Game{gameLocation = location, gameCharacter = character, gameInven
                                 actioBool = isActionPossible' && isObjHere'
                             case actionStr of
                                 "read" | actioBool -> readObj obj
-                                "examine" | actioBool -> examineObj obj
+                                "examine" | actioBool -> 
+                                    if objId obj == 9
+                                    then interactSword obj
+                                    else examineObj obj
                                 "save" | actioBool -> 
                                     case gamePrincess game of
                                         PrincessDead -> putStrLn "The princess is already dead. You failed to save her.\n"
                                         PrincessSaved -> putStrLn "The princess is already saved.\n"
                                         PrincessAlive -> void $ handlePrincessSave game
                                 "take" | actioBool -> void $ handleTake game obj
-                                "activate" | actioBool -> void $ handleActivate game obj
+                                "activate" | actioBool -> 
+                                    if objId obj == 9
+                                    then interactSword obj
+                                    else void $ handleActivate game obj
                                 "attack" | actioBool -> void $ handleFight game obj
                                 "fight" | actioBool -> void $ handleFight game obj
                                 _ -> doNothinSimple obj

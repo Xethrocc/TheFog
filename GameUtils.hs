@@ -129,7 +129,7 @@ addSteps :: Character -> Character
 addSteps char = char { charSteps = charSteps char + 1 }
 
 addAng :: Inventory -> Character -> Character
-addAng inv char = if any (\obj -> objId obj == 9) inv then char { charAttack = 10 } else char
+addAng inv char = char
 
 addDef :: Inventory -> Character -> Character
 addDef inv char = if any (\obj -> objId obj == 3) inv then char { charDefense = 10 } else char
