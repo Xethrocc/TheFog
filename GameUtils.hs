@@ -122,8 +122,10 @@ addSteps :: Character -> Character
 addSteps char = char { charSteps = charSteps char + 1 }
 
 addAng :: Inventory -> Character -> Character
--- (Fix 9/20) Schwert (objId 9) im Inventar erhoehht den Angriff
-addAng inv char = if any (\obj -> objId obj == 9) inv then char { charAttack = 10 } else char
+-- DESIGN (Autor): Der Protagonist ist NICHT der Held der Prophezeiung.
+-- Das Schwert leuchtet fuer ihn nur kurz auf und erlischt (interactSword) -
+-- es verleiht bewusst KEINEN Angriffsbonus. addAng bleibt wirkungslos.
+addAng _ char = char
 
 addDef :: Inventory -> Character -> Character
 addDef inv char = if any (\obj -> objId obj == 3) inv then char { charDefense = 10 } else char
