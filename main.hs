@@ -5,8 +5,8 @@ import GameData
 import GameActions
 import GameUtils
 import GameConstants
-import Data.Maybe (isJust)
-import Data.Char (toLower)
+import Data.Maybe (isJust, isNothing, fromMaybe)
+import Data.Char (isSpace, toLower)
 import System.IO (isEOF)
 import System.Random (newStdGen, randomR)
 
@@ -32,11 +32,26 @@ stringToDirection s
     | s `elem` secret = Just SE
     | otherwise = Nothing
 
+-- (Fix) Eingaben werden getrimmt und kleingeschrieben. Alle Konstanten
+-- (Richtungen, Aktionen, Aliase) enthalten bereits Kleinschreibungen,
+-- dadurch matchen jetzt auch "North", "TAKE apple" und " show inventory ".
+normalize :: String -> String
+normalize = map toLower . trim
+  where
+    trim = dropWhile isSpace . reverse . dropWhile isSpace . reverse
+
+-- (Fix) EOF-sicher lesen. `getLine` wirft am Ende der Eingabe eine Exception;
+-- der fruehere `isEOF`-Check nach `getLine` kam also zu spaet.
+readLine :: IO (Maybe String)
+readLine = do
+    eof <- isEOF
+    if eof then return Nothing else Just <$> getLine
+
 -- (Fix 17 / UX) Pause nach Aktionen, die Text ausgeben
 pause :: IO ()
 pause = do
     putStrLn "Press 'Enter' to continue."
-    _ <- getLine
+    _ <- readLine
     putStrLn ""
 
 -- (Fix 2/13/25) Bewegung nur bei gueltiger Richtung UND vorhandenem Exit.
@@ -93,6 +108,7 @@ handlePrincessSave game obj = do
                         , gameObjects = deleteByObjId (objId obj) (gameObjects game) }
         else do
             putStrLn "You tried to save the princess but she drowned!\n"
+            putStrLn "Maybe you're not hero enough..\n"
             return game { gamePrincess = PrincessDead }
 
 -- (Fix 5) Crystal-Check: geprueft wird, ob der Kristall im Inventar liegt -
@@ -173,16 +189,20 @@ fightLoop game@Game{gameLocation = location, gameCharacter = character} object e
     putStrLn ("________________________________________________________________________________")
     putStrLn ("________________________________________________________________________________")
 
-    input <- getLine
+    minput <- readLine
     -- Der Kampf liest das Verb genauso wie die Hauptschleife. Vorher stand
     -- hier `input elem ["attack","hit"]` gegen die GANZE Zeile, d. h.
     -- "attack wolf" wurde im Kampf als Zögern gewertet, obwohl genau das
     -- der Befehl ist, den der Bildschirm nahelegt.
-    let verb = map toLower (takeWhile (/= ' ') (dropWhile (== ' ') input))
+    let input = fromMaybe "" minput
+        verb  = map toLower (takeWhile (/= ' ') (dropWhile (== ' ') input))
 
     -- `quitFight` enthaelt bereits die kleingeschriebenen Formen; die
     -- `verb` ist kleingeschrieben, also direkt vergleichen.
-    if verb `elem` quitFight
+    -- (Fix) EOF: der Kampf bricht sauber ab, die Hauptschleife meldet "Bye!".
+    if isNothing minput
+        then return game
+        else if verb `elem` quitFight
         then do
             putStrLn "You fled from the fight!\n"
             -- (A4) Flucht kostet einen Zug, ist aber nie blockiert -
@@ -197,7 +217,7 @@ fightLoop game@Game{gameLocation = location, gameCharacter = character} object e
                 if newEnemyHP <= 0
                     then do
                         putStrLn "You Won! Press 'Enter' to continue"
-                        _ <- getLine
+                        _ <- readLine
                         let updatedObjList = attackObj object (gameObjects game)
                             killWolf w = if wolfId w == objId object then w { wolfDead = True } else w
                         return game { gameObjects = updatedObjList
@@ -282,36 +302,40 @@ gameLoop' game@Game{gameLocation = location, gameCharacter = character, gameInve
     setSGR [Reset]
     putStrLn ("________________________________________________________________________________")
     putStrLn ("________________________________________________________________________________")
-    input <- getLine
-
-    -- Ohne diese Pruefung dreht sich das Spiel endlos: `getLine` liefert am
-    -- EOF einen leeren String, und leere Eingabe bedeutet "nur neu zeichnen".
-    eof <- isEOF
-    if eof then putStrLn "\nBye!"
-    -- (B2) Der `checkEnding`-Check vor `processInput` war redundant: die
-    -- activate-Branch greift bereits. `fogEnding` haengt dort an.
-    else processInput game input
+    -- (Fix) EOF wird VOR dem Lesen geprueft: `getLine` wirft am Ende der
+    -- Eingabe eine Exception, ein Check nach `getLine` kam also zu spaet.
+    minput <- readLine
+    case minput of
+        Nothing -> putStrLn "\nBye!"
+        -- (B2) Der `checkEnding`-Check vor `processInput` war redundant: die
+        -- activate-Branch greift bereits. `fogEnding` haengt dort an.
+        Just input -> processInput game input
 
 -- (Fix 7/17) Eingabe-Verarbeitung in klarer Reihenfolge:
 -- 1. leere Eingabe ignorieren  2. quit  3. Inventory  4. Bewegung  5. Aktion
 processInput :: Game -> String -> IO ()
-processInput game input
+processInput game rawInput
     | null input = gameLoop game
     | input `elem` quitCharacter = putStrLn "Bye!"   -- (Fix 16) beendet das Spiel wirklich
     | input `elem` invActions = showInventory (gameInventory game) >> pause >> gameLoop game
     | isJust (stringToDirection input) = handleMovement game input >>= gameLoop
-    | otherwise =
-        let splitInput = splitString input
-            actionStr = head splitInput
-            objectName = unwords (tail splitInput)
-            targetObject = if null objectName
-                               then Nothing
-                               else getObject objectName (gameLocation game) (gameObjects game ++ gameInventory game) (gameWolves game)
-        in case targetObject of
-            Nothing -> do
-                putStrLn "You can't do that. (Type 'read Help' for a list of commands.)\n"
-                gameLoop game
-            Just obj -> performAction game actionStr obj
+    -- (Fix) `head splitInput` crashte bei Eingaben nur aus Leerzeichen.
+    -- `words` + Pattern-Match sind sicher und fassen auch mehrfache
+    -- Leerzeichen/Tabs zusammen.
+    | otherwise = case words input of
+        [] -> gameLoop game
+        (actionStr:rest) ->
+            let objectName = unwords rest
+                targetObject = if null objectName
+                                   then Nothing
+                                   else getObject objectName (gameLocation game) (gameObjects game ++ gameInventory game) (gameWolves game)
+            in case targetObject of
+                Nothing -> do
+                    putStrLn "You can't do that. (Type 'read Help' for a list of commands.)\n"
+                    gameLoop game
+                Just obj -> performAction game actionStr obj
+  where
+    input = normalize rawInput
 
 -- (Fix 1/3/4) Objekt-Aktionen: Ergebnisse der Handler werden verkettet
 -- (>>= gameLoop), sodass Zustandserweiterungen erhalten bleiben.
@@ -428,7 +452,8 @@ fogEnding game = do
 game :: IO ()
 game = do
     putStrLn ("Whats Your (Character) Name?")
-    charName <- getLine
+    minput <- readLine
+    let charName = fromMaybe "" minput   -- leer/EOF -> "Hero" (giveName)
     gameLoop Game { gameLocation = locById 53
                   , gameCharacter = giveName charName
                   , gameInventory = initialInventory
