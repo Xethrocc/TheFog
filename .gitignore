@@ -1,6 +1,10 @@
 .vscode/tasks.json
 fix-plan.md
 
+# Agent-/Planungs-Verzeichnisse
+.pi/
+.kilo/
+
 # Haskell build artifacts
 *.hi
 *.o
