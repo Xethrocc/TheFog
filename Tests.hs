@@ -1,5 +1,6 @@
 -- Deterministische Tests der Mechaniken. Nicht Teil des Spiels.
---   runghc -package array -package mtl -package random Tests.hs
+--   runghc --ghc-arg=-package=array --ghc-arg=-package=mtl --ghc-arg=-package=random Tests.hs
+--   (neuere runghc-Versionen interpretieren `-package array` als Dateinamen)
 module Main where
 
 import Data.Array

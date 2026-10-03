@@ -50,12 +50,6 @@ getObjStr = objName
 isActionPossible :: String -> Object -> Bool
 isActionPossible x obj = x `elem` objActions obj
 
-splitString :: String -> [String]
-splitString x = case break (==' ') x of
-                (a, ' ':b) -> a : splitString b
-                (a, "")    -> [a]
-                (a, _)     -> [a]
-
 isObjHere :: Object -> Location -> Bool
 isObjHere obj loc = objPos obj == locId loc
 
