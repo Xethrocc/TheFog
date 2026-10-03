@@ -1,9 +1,5 @@
 module GameTypes where
 
-import Data.Array
-import Data.List
-import Data.Maybe
-
 data Direction = N|O|S|W|SE deriving (Eq,Show,Enum,Ord)
 type LocString = String
 
@@ -38,7 +34,8 @@ data Character = Character {
     charSteps  :: Steps,
     charAttack :: Ang,
     charDefense :: Def,
-    charLife   :: Life
+    charLife   :: Life,
+    charMaxLife :: Life
 } deriving (Eq, Show)
 
 type Steps = Int
@@ -60,12 +57,15 @@ data Wolf = Wolf {
     wolfDead :: Bool
 } deriving (Eq,Show)
 
+-- NOTE (A6): gameStepCounter entfernt. Es gab zwei tote Step-Counter -
+-- charSteps (echt, wird angezeigt) und gameStepCounter (wurde nur an
+-- spawnPostFogWolves gereicht, dessen step-Parameter nie benutzt wurde).
+-- Neu: advanceTurn in GameActions ist der einzige Zugzaehler.
 data Game = Game {
     gameLocation    :: Location,
     gameCharacter   :: Character,
     gameInventory   :: Inventory,
     gameObjects     :: ObjectList,
-    gameStepCounter :: Int,
     gameWolves      :: [Wolf],
     gameShrineFlags :: (Bool, Bool, Bool, Bool),
     gamePrincess    :: PrincessStatus

@@ -6,7 +6,8 @@ import GameActions
 import GameUtils
 import GameConstants
 import Data.Maybe (isJust)
-import Data.List (find, delete)
+import Data.Char (toLower)
+import System.IO (isEOF)
 import System.Random (newStdGen, randomR)
 
 main :: IO ()
@@ -19,7 +20,7 @@ drawBar current maxHP
     | otherwise =
         let filled = min 10 (current * 10 `div` maxHP)
             empty = 10 - filled
-        in (replicate filled '█') ++ (replicate empty ' ')
+        in (replicate filled '\9608') ++ (replicate empty ' ')
 
 -- (Fix 2) Richtung aus Eingabe parsen -> Nothing statt `error`-Crash
 stringToDirection :: String -> Maybe Direction
@@ -40,7 +41,11 @@ pause = do
 
 -- (Fix 2/13/25) Bewegung nur bei gueltiger Richtung UND vorhandenem Exit.
 -- Bei ungueltiger Eingabe: Meldung, Spielzustand unveraendert (keine
--- Wolf-Bewegung, kein Step-Counter).
+-- Wolf-Bewegung, kein Schritt).
+--
+-- (A4) Ein Zug = Bewegung -> `advanceTurn`: Schritt zaehlen, Wölfe bewegen,
+-- im Nebel 1 LP abziehen. `spawnPostFogWolves` ist hier raus (A6) und wird
+-- nur noch beim Nebel-Uebergang aufgerufen (B2).
 handleMovement :: Game -> String -> IO Game
 handleMovement game direction =
     case stringToDirection direction of
@@ -52,32 +57,26 @@ handleMovement game direction =
                 putStrLn "You can't go that way.\n"
                 return game
             Just nextLocId -> do
-                let newStep = gameStepCounter game + 1
-                    newWolves = moveWolves newStep (gameWolves game)
-                    wolvesWithNew = spawnPostFogWolves newWolves (gameShrineFlags game) newStep
-                    -- (Fix 20) Steps-Zaehler des Charakters mitfuehren
-                    movedGame = game { gameLocation = gameMap !! nextLocId
-                                     , gameWolves = wolvesWithNew
-                                     , gameStepCounter = newStep
-                                     , gameCharacter = addSteps (gameCharacter game) }
+                let moved = advanceTurn game { gameLocation = locById nextLocId }
                 putStrLn ""
                 -- (Fix 22) Woelfe sind gefaehrlich: Biss beim Betreten moeglich
-                maybeBite movedGame
+                maybeBite moved
 
--- (Fix 11) Die Rettung ist jetzt deterministisch (kein mod-3-Glueck mehr)
--- und die Prinzessin verschwindet danach aus der Objektliste.
 -- (Fix 22) Beim Betreten einer Location mit (lebendem) Wolf: 50% Chance
--- auf einen Biss (1-3 Schaden). Tod wird vom gameLoop-Guard abgefangen.
+-- auf einen Biss (roh 1-3).
+-- (A3) Der Biss laeuft jetzt durch `damage` und benutzt `getDef`. Vorher
+-- wurden die Verteidigung des Helden komplett ignoriert.
 maybeBite :: Game -> IO Game
 maybeBite game
     | any (\w -> wolfLoc w == locId (gameLocation game) && not (wolfDead w)) (gameWolves game) = do
         chance <- roll 0 1
         if chance == (1 :: Int)
             then do
-                dmg <- roll 1 3
+                raw <- roll 1 3
                 let char = gameCharacter game
+                    dmg = damage raw (getDef char)
                 putStrLn ("A wolf lunges from the shadows and bites you for " ++ show dmg ++ "!\n")
-                return game { gameCharacter = char { charLife = getHP char - dmg } }
+                return game { gameCharacter = char { charLife = max 0 (getHP char - dmg) } }
             else return game
     | otherwise = return game
 
@@ -91,17 +90,16 @@ handlePrincessSave game obj = do
         then do
             putStrLn "You dive into the river and guide the princess to safety!\n"
             return game { gamePrincess = PrincessSaved
-                        , gameObjects = delete obj (gameObjects game) }
+                        , gameObjects = deleteByObjId (objId obj) (gameObjects game) }
         else do
             putStrLn "You tried to save the princess but she drowned!\n"
             return game { gamePrincess = PrincessDead }
 
--- (Fix 5) Crystal-Check korrigiert: es wird geprueft, ob ein Objekt mit
--- objId 4 (Crystal) im Inventar liegt - nicht mehr, ob das Shrine-Objekt
--- selbst im Inventar ist (war immer False).
+-- (Fix 5) Crystal-Check: geprueft wird, ob der Kristall im Inventar liegt -
+-- nicht, ob das Shrine-Objekt selbst dort ist (war immer False).
 handleActivate :: Game -> Object -> IO Game
 handleActivate game obj = do
-    let hasCrystal = any (\t -> objId t == 4) (gameInventory game)
+    let hasCrystal = any ((== crystalId) . objId) (gameInventory game)
     if hasCrystal then do
         let updatedObjList = activateObj obj (gameObjects game) (gameInventory game)
             updatedFlags = updateShrineFlags obj (gameShrineFlags game)
@@ -113,8 +111,10 @@ handleActivate game obj = do
         pause
         return game
 
--- (Fix 9/20) Inventar-Boni werden direkt auf den Charakter angewendet
--- (Schild -> Defense 10, Schwert -> Attack 10)
+-- (Fix 9/20) Inventar-Boni werden auf den Charakter angewendet.
+-- (A3) `addDef` liefert jetzt Basis + Bonus (1 + 4 = 5 mit Schild) statt
+-- den Absolutwert 10 zu setzen. `addAng` bleibt wirkungslos - siehe
+-- GameUtils.addAng.
 handleTake :: Game -> Object -> IO Game
 handleTake game obj = do
     let (updatedObjList, updatedInv) = takeObj obj (gameObjects game) (gameInventory game)
@@ -125,17 +125,16 @@ handleTake game obj = do
                 , gameInventory = updatedInv
                 , gameCharacter = updatedChar }
 
--- (Fix 10) Gegner-HP aus den echten Wolf-Daten (Waechter 30, Patrouille 12);
--- der Wolf stirbt erst bei Sieg (in fightLoop); nach dem Kampf zurueck zur
--- urspruenglichen Location.
+-- (Fix 10) Gegner-HP aus den echten Wolf-Daten, inkl. Max-HP fuer die
+-- Balken. Vorher war `enemyHP` fest auf 12 und der Balken fest auf 30.
 handleFight :: Game -> Object -> IO Game
 handleFight game obj = do
     let homeLoc = gameLocation game
-        enemyHP = case find (\w -> wolfId w == objId obj) (gameWolves game) of
-                    Just w  -> wolfHp w
-                    Nothing -> 12   -- statisches Wolf-Objekt ("Tutorial"-Wolf)
-        updatedWolfGame = game { gameLocation = Location { locId = 54, locName = "Wolf-Fight", locExits = [] } }
-    result <- fightLoop updatedWolfGame obj enemyHP
+        (enemyHP, enemyMaxHP) = wolfFullStats (gameWolves game) (objId obj)
+        fightGame = game { gameLocation = Location { locId = 54
+                                                   , locName = "Wolf-Fight"
+                                                   , locExits = [] } }
+    result <- fightLoop fightGame obj enemyHP enemyMaxHP
     return result { gameLocation = homeLoc }
 
 -- (Fix 9) Wuerfel-Helfer fuer variablen Schaden
@@ -144,67 +143,109 @@ roll lo hi = do
     gen <- newStdGen
     return (fst (randomR (lo, hi) gen))
 
--- (Fix 9/10) Kampfsystem: nur 'attack'/'hit' verursacht Schaden, der Wolf
--- schlaegt zurueck (max. 0 => Schild kann vollstaendig schuetzen), der
--- Spieler kann sterben; Gegner-HP stammt aus den Wolf-Daten.
-fightLoop :: Game -> Object -> Int -> IO Game
-fightLoop game@Game{gameLocation = location, gameCharacter = character, gameObjects = objList} object enemyHP = do
+-- Kampfsystem.
+--
+-- (A3) Beide Seiten laufen durch dieselbe Schadensformel `damage`. Die
+--      Verteidigung des Wolfs wird benutzt (vorher mit `_` verworfen), und
+--      der Spieler verursacht mindestens 1 Schaden, damit ein hoher
+--      Schutzwert keinen Endlos-Kampf erzeugt.
+--
+-- (A4) Jede Kampf-Runde und jedes `flee` kosten einen Zug (`advanceTurn`).
+--      Bewusst KEIN Off-Screen-Biss: sonst waere der Guardian-Kampf bei
+--      ~6 Runden nicht ueberlebbar, weil Wolf 42 ueber Loc 17 mitlaeuft.
+--
+-- (B5) Im Nebel zieht `advanceTurn` zusaetzlich 1 LP ab - auch mitten im
+--      Kampf. Der Nebel-Todesmarsch laesst sich also nicht auskämpfen.
+fightLoop :: Game -> Object -> Life -> Life -> IO Game
+fightLoop game@Game{gameLocation = location, gameCharacter = character} object enemyHP enemyMaxHP = do
     putStrLn ("________________________________________________________________________________")
     putStrLn ("________________________________________________________________________________\n")
     ascii (locA location)
 
     putStrLn ("                    You are fighting a " ++ (getObjStr object))
-    putStrLn ("\n                    " ++ locD location ++ "\n\n")
+    putStrLn ("\n                    " ++ locD (fogActive game) location ++ "\n\n")
     putStrLn ("\nYour Atk: " ++ show(getAtk character))
     putStrLn ("Your Def: " ++ show(getDef character))
-    putStrLn ("\nYour HP:  " ++ show(getHP character) ++ " [" ++ (drawBar (getHP character) 10) ++ "]")
+    putStrLn ("\nYour HP:  " ++ show(getHP character) ++ " [" ++ (drawBar (getHP character) (getMaxHP character)) ++ "]")
     putStrLn ("Your Steps:   "  ++ show(getSteps character))
-    putStrLn ("\nHP of the " ++ (getObjStr object) ++ ": " ++ show(enemyHP) ++ " [" ++ (drawBar enemyHP 30) ++ "]")
+    putStrLn ("\nHP of the " ++ (getObjStr object) ++ ": " ++ show(enemyHP) ++ " [" ++ (drawBar enemyHP enemyMaxHP) ++ "]")
     putStrLn ("\n\nYou can 'attack' or try to 'flee'..\n What will u do?")
     putStrLn ("________________________________________________________________________________")
     putStrLn ("________________________________________________________________________________")
 
     input <- getLine
+    -- Der Kampf liest das Verb genauso wie die Hauptschleife. Vorher stand
+    -- hier `input elem ["attack","hit"]` gegen die GANZE Zeile, d. h.
+    -- "attack wolf" wurde im Kampf als Zögern gewertet, obwohl genau das
+    -- der Befehl ist, den der Bildschirm nahelegt.
+    let verb = map toLower (takeWhile (/= ' ') (dropWhile (== ' ') input))
 
-    if input `elem` quitFight
+    -- `quitFight` enthaelt bereits die kleingeschriebenen Formen; die
+    -- `verb` ist kleingeschrieben, also direkt vergleichen.
+    if verb `elem` quitFight
         then do
             putStrLn "You fled from the fight!\n"
-            return game
-        else if input `elem` ["attack", "hit"]
+            -- (A4) Flucht kostet einen Zug, ist aber nie blockiert -
+            -- der Anti-Softlock gegen mehrere Wölfe im Raum.
+            return (advanceTurn game)
+        else if verb `elem` ["attack", "hit"]
             then do
                 pBonus <- roll 0 2
-                let playerDmg = getAtk character + pBonus
+                let (wAtk, wDef) = wolfCombatStats (gameWolves game) (objId object)
+                    playerDmg = max 1 (getAtk character + pBonus - wDef)
                     newEnemyHP = enemyHP - playerDmg
                 if newEnemyHP <= 0
                     then do
                         putStrLn "You Won! Press 'Enter' to continue"
                         _ <- getLine
-                        let updatedObjList = attackObj object objList
+                        let updatedObjList = attackObj object (gameObjects game)
                             killWolf w = if wolfId w == objId object then w { wolfDead = True } else w
-                        return game { gameObjects = updatedObjList, gameWolves = map killWolf (gameWolves game) }
+                        return game { gameObjects = updatedObjList
+                                    , gameWolves = map killWolf (gameWolves game) }
                     else do
                         wBonus <- roll 0 2
-                        let (wAtk, _) = wolfCombatStats (gameWolves game) (objId object)
-                            wolfDmg = max 0 (wAtk - getDef character + wBonus)
+                        let wolfDmg = damage (wAtk + wBonus) (getDef character)
                             newHP = getHP character - wolfDmg
-                        putStrLn ("You hit for " ++ show playerDmg ++ "! The " ++ getObjStr object ++ " hits back for " ++ show wolfDmg ++ "!\n")
+                            counter = if wolfDmg == 0
+                                        then "The " ++ getObjStr object ++ " strikes, and the shield holds."
+                                        else "The " ++ getObjStr object ++ " hits back for " ++ show wolfDmg ++ "!"
+                        putStrLn ("You hit for " ++ show playerDmg ++ "! " ++ counter ++ "\n")
                         if newHP <= 0
                             then return game { gameCharacter = character { charLife = 0 } }
-                            else fightLoop (game { gameCharacter = character { charLife = newHP } }) object newEnemyHP
+                            else do
+                                let after = advanceTurn (game { gameCharacter = character { charLife = newHP } })
+                                if getHP (gameCharacter after) <= 0
+                                    then return after
+                                    else fightLoop after object newEnemyHP enemyMaxHP
             else do
                 putStrLn "You hesitate... (You can 'attack' or 'flee')\n"
-                fightLoop game object enemyHP
+                fightLoop game object enemyHP enemyMaxHP
 
 -- (Fix 9/22) Tod-Check zentral im gameLoop: gilt fuer Kampf- und Biss-Tod.
+-- (B6) Der Nebel-Tod hat einen eigenen Screen, weil inhaltlich etwas
+-- anderes passiert. Der Basis-Tod bleibt unveraendert.
 gameLoop :: Game -> IO ()
 gameLoop game
-    | getHP (gameCharacter game) <= 0 = do
-        putStrLn "Your vision fades... you collapse. You have died."
-        putStrLn "Game Over."
+    | getHP (gameCharacter game) <= 0 =
+        if fogActive game
+            then fogDeath (getSteps (gameCharacter game))
+            else do
+                putStrLn "Your vision fades... you collapse. You have died."
+                putStrLn "Game Over."
     | otherwise = gameLoop' game
+
+-- (B6) Keine Aufloesung, kein Rueckweg, kein "du haettest".
+fogDeath :: Steps -> IO ()
+fogDeath steps = do
+    putStrLn "The fog closes over you. It does not lift."
+    putStrLn "You cannot tell which way the shrines are any more, or whether you ever reached them."
+    putStrLn ("You took " ++ show steps ++ " steps into the fog. Nobody else counted them.")
+    putStrLn "Game Over."
 
 -- (Fix 1/3/4) Das Spiel-Herzstueck: zeigt die Location an, liest die Eingabe
 -- und delegiert an `processInput`.
+-- (B8) Die Wolf-Warnung ist im Nebel deutlich haeufiger. Bewusst
+-- unveraendert - sie macht den Todesmarsch lesbar.
 gameLoop' :: Game -> IO ()
 gameLoop' game@Game{gameLocation = location, gameCharacter = character, gameInventory = inv, gameObjects = objList, gameWolves = wolves} = do
     setTitle ("THE FOG - " ++ (locS location))
@@ -220,7 +261,7 @@ gameLoop' game@Game{gameLocation = location, gameCharacter = character, gameInve
     setSGR [SetConsoleIntensity BoldIntensity]
     putStr (getString character)
     setSGR [Reset]
-    putStrLn ("\n                    " ++ locD location ++ "\n\n")
+    putStrLn ("\n                    " ++ locD (fogActive game) location ++ "\n\n")
 
     if checkEncounter location wolves
         then do
@@ -237,15 +278,19 @@ gameLoop' game@Game{gameLocation = location, gameCharacter = character, gameInve
     putStrLn ("\nYour Attack:  " ++ show(getAtk character))
     putStrLn ("Your Defense: " ++ show(getDef character))
     putStrLn ("Your Steps:   "  ++ show(getSteps character))
-    putStrLn ("Your HP:      "  ++ show(getHP character))
+    putStrLn ("Your HP:      "  ++ show(getHP character) ++ " / " ++ show(getMaxHP character))
     setSGR [Reset]
     putStrLn ("________________________________________________________________________________")
     putStrLn ("________________________________________________________________________________")
     input <- getLine
 
-    if checkEnding (gameShrineFlags game)
-        then fogEnding
-        else processInput game input
+    -- Ohne diese Pruefung dreht sich das Spiel endlos: `getLine` liefert am
+    -- EOF einen leeren String, und leere Eingabe bedeutet "nur neu zeichnen".
+    eof <- isEOF
+    if eof then putStrLn "\nBye!"
+    -- (B2) Der `checkEnding`-Check vor `processInput` war redundant: die
+    -- activate-Branch greift bereits. `fogEnding` haengt dort an.
+    else processInput game input
 
 -- (Fix 7/17) Eingabe-Verarbeitung in klarer Reihenfolge:
 -- 1. leere Eingabe ignorieren  2. quit  3. Inventory  4. Bewegung  5. Aktion
@@ -261,7 +306,7 @@ processInput game input
             objectName = unwords (tail splitInput)
             targetObject = if null objectName
                                then Nothing
-                               else getObject objectName (gameObjects game ++ gameInventory game) (gameWolves game)
+                               else getObject objectName (gameLocation game) (gameObjects game ++ gameInventory game) (gameWolves game)
         in case targetObject of
             Nothing -> do
                 putStrLn "You can't do that. (Type 'read Help' for a list of commands.)\n"
@@ -269,28 +314,40 @@ processInput game input
             Just obj -> performAction game actionStr obj
 
 -- (Fix 1/3/4) Objekt-Aktionen: Ergebnisse der Handler werden verkettet
--- (>>= gameLoop), sodass Zustandserweiterungen (Inventar, Flags, Prinzessin)
--- erhalten bleiben und das Spiel nach der Aktion weiterlaeuft.
+-- (>>= gameLoop), sodass Zustandserweiterungen erhalten bleiben.
+--
+-- (Befund 9) `help` war auf `saveAction` gemappt. Weil "help" in den
+-- objActions der Prinzessin stand, loeste `help Princess` einen
+-- Rettungswurf aus - die Prinzessin ertrank bei einem Hilferuf. `help`
+-- gibt jetzt immer die Hilfe aus, unabhaengig vom Objekt.
 performAction :: Game -> String -> Object -> IO ()
 performAction game actionStr obj
-    -- (Fix 9/20) Inventar-Aktionen (Apfel essen) umgehen den isObjHere-Check
-    | actionStr `elem` ["consume", "eat"] = eatApple
+    -- (A2) Essen laeuft weiterhin VOR dem isObjHere-Check, verlangt aber
+    -- jetzt eine Inventar-Mitgliedschaft. Vorher heilte `eat Apple` in der
+    -- Garden endlos, ohne dass der Apfel verbraucht wurde (er lag in
+    -- gameObjects, wurde aber nur aus gameInventory geloescht).
+    | actionStr `elem` ["consume", "eat"] = eatFood
+    | actionStr == "help" = doHelp
     | not (isActionPossible actionStr obj) = cantDo
-    | not (isObjHere obj (gameLocation game)) = cantDo
+    -- Objekte im Inventar sind überall benutzbar, nicht nur im Raum, in dem
+    -- sie aufgenommen wurden. Vorher war `read Help` ausserhalb des Start-
+    -- menues unmoeglich, und der Schild/apfel waren nach dem Einsammeln
+    -- nicht mehr benennbar.
+    | not (isObjHere obj (gameLocation game))
+    , not (any ((== objId obj) . objId) (gameInventory game)) = cantDo
     | otherwise = case actionStr of
         "read" -> readObj obj >> pause >> gameLoop game
         "examine" ->
-            if objId obj == 9
+            if objId obj == swordId
                 then interactSword obj >> pause >> gameLoop game
                 else examineObj obj >> pause >> gameLoop game
         "save" -> saveAction
-        "help" -> saveAction
         "take" -> handleTake game obj >>= gameLoop
         "pick" -> handleTake game obj >>= gameLoop   -- Alias, siehe objActions
         "activate" -> do
             g <- handleActivate game obj
             if checkEnding (gameShrineFlags g)
-                then fogEnding   -- (Original-Design) alle 4 Shrines = der Nebel senkt sich
+                then fogEnding g >>= gameLoop   -- (Original-Design) alle 4 Shrines = der Nebel faellt
                 else gameLoop g
         "attack" -> handleFight game obj >>= gameLoop
         "fight" -> handleFight game obj >>= gameLoop
@@ -300,16 +357,25 @@ performAction game actionStr obj
     cantDo = do
         putStrLn "You can't do that here.\n"
         gameLoop game
-    -- (Fix 9) Nach dem Kampf: Tod abfragen, sonst weiter im Spiel
-    -- (Fix 9/20) Apfel essen heilt 5 HP (max. 10) und verschwindet aus dem Inventar
-    eatApple
-        | objId obj == 2 = do
-            let g2 = game { gameInventory = delete obj (gameInventory game)
-                          , gameCharacter = (gameCharacter game) { charLife = min 10 (getHP (gameCharacter game) + 5) } }
-            putStrLn "You eat the Apple. It restores some of your health.\n"
+
+    doHelp = case getObjectInList "help" (gameObjects game ++ gameInventory game) of
+        Just h  -> readObj h >> pause >> gameLoop game
+        Nothing -> putStrLn "There is no help here.\n" >> gameLoop game
+
+    eatFood
+        | isFood (objId obj)
+        , any ((== objId obj) . objId) (gameInventory game)
+        , Just heal <- foodValue (objId obj) = do
+            let c = gameCharacter game
+                newHP = min (getMaxHP c) (getHP c + heal)
+                g2 = game { gameInventory = deleteByObjId (objId obj) (gameInventory game)
+                          , gameCharacter = c { charLife = newHP } }
+            putStrLn ("You eat the " ++ foodName (objId obj) ++ ". It restores "
+                      ++ show (newHP - getHP c) ++ " of your health.\n")
             pause
             gameLoop g2
         | otherwise = cantDo
+
     -- (Fix 11) Rettung deterministisch; Objekt wird danach entfernt
     saveAction = case gamePrincess game of
         PrincessDead -> putStrLn "The princess is already dead. You failed to save her.\n" >> gameLoop game
@@ -319,17 +385,50 @@ performAction game actionStr obj
             pause
             gameLoop g
 
--- (Original-Design, wie in thefog.yaml engine-seitig) Alle vier Shrines
--- aktiv = der Nebel senkt sich endgueltig uebers Land -> Game Over.
-fogEnding :: IO ()
-fogEnding = do
-    putStrLn "The fog descends over the land..."
-    putStrLn "Wolves grow stronger, guards fall, the world becomes hostile..."
-    putStrLn "Game Over."
+-- ---------------------------------------------------------------------------
+-- (B2) Der Nebel-Uebergang.
+--
+-- (Original-Design) Alle vier Shrines aktiv = der Nebel senkt sich ueber das
+-- Land. Das bleibt das Ende. Neu ist, dass es einen spielbaren Epilog gibt
+-- statt eines sofortigen "Game Over".
+--
+-- Der Uebergangstext benennt den Spieler als Ursache - das ist die Pointe
+-- der Tragik-Komodie: er hat sich fuer den Helden der Prophezeiung gehalten
+-- und am Ende den Nebel gerufen, vor dem die Prophezeiung warnte.
+--
+-- Wichtig: Der Text verspricht KEINE Aufloesung. Er richtet sich an dem
+-- Wortlaut der Prophezeiung aus, der gerade NICHT behauptet, ein
+-- Schwert-Held koenne den Nebel zurueckschlagen - er sagt nur, dass ein
+-- Nebel kommen wird.
+-- ---------------------------------------------------------------------------
+fogEnding :: Game -> IO Game
+fogEnding game = do
+    putStrLn "The fourth shrine goes quiet under your hand."
+    putStrLn ""
+    putStrLn "Then the fog comes. It does not creep in. It is simply there, the way it was always going to be."
+    putStrLn ""
+    putStrLn "The prophecy never said a hero would turn it back. It only said that a fog would set over this land,"
+    putStrLn "and it never said who would be standing here when it did."
+    putStrLn ""
+    putStrLn "You were never the one it was waiting for. You are the reason it is here."
+    putStrLn ""
+    pause
+    putStrLn "The air goes grey. Out in it, something moves."
+    putStrLn "Then something else. Then a lot of something."
+    putStrLn ""
+    putStrLn "From here on, time is not free. Every step you take and every round you fight, the fog takes a little more of you."
+    pause
+    return game { gameWolves = spawnPostFogWolves (gameWolves game) (gameShrineFlags game) }
 
 game :: IO ()
 game = do
     putStrLn ("Whats Your (Character) Name?")
     charName <- getLine
-    gameLoop Game { gameLocation = gameMap !! 53, gameCharacter = giveName charName, gameInventory = [], gameObjects = objectList, gameStepCounter = 0, gameWolves = initialWolves, gameShrineFlags = initialShrineFlags, gamePrincess = initialPrincessStatus }
+    gameLoop Game { gameLocation = locById 53
+                  , gameCharacter = giveName charName
+                  , gameInventory = initialInventory
+                  , gameObjects = objectList
+                  , gameWolves = initialWolves
+                  , gameShrineFlags = initialShrineFlags
+                  , gamePrincess = initialPrincessStatus }
     return ()
