@@ -374,8 +374,22 @@ processInput game rawInput
 -- objActions der Prinzessin stand, loeste `help Princess` einen
 -- Rettungswurf aus - die Prinzessin ertrank bei einem Hilferuf. `help`
 -- gibt jetzt immer die Hilfe aus, unabhaengig vom Objekt.
+--
+-- (Punkt 2) `save` heisst nicht "irgendein Objekt". Der Zweig steht VOR dem
+-- `isActionPossible`-Filter, damit das Verbum eine Antwort auf "gibt es
+-- hier jemanden zu retten" ist und nicht auf "kann ich genau das hier".
+-- Sonst bekaeme `save Door Lintel` weiterhin die generische Meldung
+-- "You can't do that here.", die zur Frage nichts sagt.
 performAction :: Game -> String -> Object -> IO ()
 performAction game actionStr obj
+    -- (Punkt 2) `PrincessSaved` und `PrincessDead` sind ausdruecklich NICHT
+    -- hier enthalten (Autor-Vorgabe): beide Status behalten ihre eigene
+    -- Meldung. Deshalb haengt die Bedingung an `PrincessAlive`.
+    --
+    -- `princessInRoom` prueft die Objektliste an der aktuellen Location, nicht
+    -- den Status: `PrincessSaved` loescht das Objekt, `PrincessDead` laesst
+    -- es liegen - der Status allein verraet nicht, ob sie vor einem steht.
+    | nobodyToSave = putStrLn "There is no one to save here.\n" >> gameLoop game
     -- (A2) Essen laeuft weiterhin VOR dem isObjHere-Check, verlangt aber
     -- jetzt eine Inventar-Mitgliedschaft. Vorher heilte `eat Apple` in der
     -- Garden endlos, ohne dass der Apfel verbraucht wurde (er lag in
@@ -412,6 +426,10 @@ performAction game actionStr obj
         putStrLn "You can't do that here.\n"
         gameLoop game
 
+    nobodyToSave = actionStr == "save"
+                && gamePrincess game == PrincessAlive
+                && not (princessInRoom game)
+
     doHelp = case getObjectInList "help" (gameObjects game ++ gameInventory game) of
         Just h  -> readObj h >> pause >> gameLoop game
         Nothing -> putStrLn "There is no help here.\n" >> gameLoop game
@@ -431,6 +449,11 @@ performAction game actionStr obj
         | otherwise = cantDo
 
     -- (Fix 11) Rettung deterministisch; Objekt wird danach entfernt
+    --
+    -- (Punkt 2) Hier landet nur noch, was `nobodyToSave` durchgelassen hat:
+    -- die Prinzessin steht wirklich im Raum. `PrincessSaved` und
+    -- `PrincessDead` behalten ihre eigenen Meldungen - der Autor hat sie
+    -- ausdruecklich vom neuen Zweig ausgenommen.
     saveAction = case gamePrincess game of
         PrincessDead -> putStrLn "The princess is already dead. You failed to save her.\n" >> gameLoop game
         PrincessSaved -> putStrLn "The princess is already saved.\n" >> gameLoop game

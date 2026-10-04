@@ -152,6 +152,19 @@ setWolfHp wid hp = map upd
 persistWolfHp :: Game -> ObjectID -> Life -> Game
 persistWolfHp game wid hp = game { gameWolves = setWolfHp wid hp (gameWolves game) }
 
+-- ---------------------------------------------------------------------------
+-- (Punkt 2) `save` ohne Prinzessin im Raum
+-- ---------------------------------------------------------------------------
+-- Anwesenheit muss ausdruecklich geprueft werden. Der Status allein sagt
+-- nichts darueber aus, ob sie vor einem steht: `PrincessSaved` loescht ihr
+-- Objekt aus `gameObjects`, `PrincessDead` laesst es liegen (beides in
+-- main.hs). Nur `gameObjects` an der aktuellen Location beantwortet die
+-- Frage, die der Spieler stellt.
+princessInRoom :: Game -> Bool
+princessInRoom game = any inRoom (gameObjects game)
+  where
+    inRoom o = objId o == princessId && objPos o == locId (gameLocation game)
+
 -- Check ending condition
 checkEnding :: (Bool, Bool, Bool, Bool) -> Bool
 checkEnding (e, w, f, a) = e && w && f && a

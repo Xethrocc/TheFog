@@ -296,8 +296,7 @@ main = do
   ok "kein 'help' mehr bei der Prinzessin" (not ("help" `elem` objActions (objById 11)))
   ok "'burn' kein No-op mehr"         (not (any (\o -> "burn" `elem` objActions o) objectList))
 
-  section "Punkt 1: Wolf-Fight (Loc 54) entfernt"
-  -- Der Eintrag behauptete einen Ort, den es nicht gab: kein Exit fuehrte
+  section "Punkt 1: Wolf-Fight (Loc 54) entfernt"  -- Der Eintrag behauptete einen Ort, den es nicht gab: kein Exit fuehrte
   -- nach 54, die Location selbst hatte keine Exits. `fightLoop` braucht
   -- trotzdem eine echte Location fuer ASCII-Kunst und Banner.
   ok "Loc 54 nicht mehr in gameMap"   (null (filter ((== 54) . locId) gameMap))
@@ -315,6 +314,36 @@ main = do
   ok "fogDescr kennt weiter 54"        (lookup 54 fogDescr == Just ">>You are in a Fight!<<")
   -- `descr` bleibt dicht: 0..60 ohne Luecken, sonst bricht das Array.
   ok "descr weiterhin dicht 0..60"    (length [i | i <- [0 .. 60], inRange (bounds descr) i, hasDescr i] == 61)
+
+  section "Punkt 2: save ohne Prinzessin im Raum"
+  -- Nur die Prinzessin traegt "save" in ihren objActions. Deshalb ist der
+  -- neue Zweig in `performAction` der einzige Weg, ueberhaupt jemand
+  -- anderen anzusprechen - ohne ihn bekaeme `save Door Lintel` weiterhin
+  -- "You can't do that here.".
+  ok "nur die Prinzessin hat 'save'"   (map objId (filter (\o -> "save" `elem` objActions o) objectList)
+                                         == [princessId])
+  let at loc    = mkGame { gameLocation = loc }
+      riverG    = at (locById 33)
+      homeG     = at (locById 0)
+      gDrown    = riverG { gamePrincess = PrincessDead }
+      gSaved    = (riverG { gameObjects = deleteByObjId princessId (gameObjects riverG) })
+                      { gamePrincess = PrincessSaved }
+  ok "am Fluss: Prinzessin da"        (princessInRoom riverG)
+  ok "zu Hause: niemand"              (not (princessInRoom homeG))
+  -- PrincessDead laesst ihr Objekt liegen: Anwesenheit, nicht Status.
+  ok "tot, aber am Fluss: da"         (princessInRoom gDrown)
+  -- PrincessSaved loescht es: Anwesenheit nicht aus dem Status ableitbar.
+  ok "gerettet: Objekt ist weg"       (not (any ((== princessId) . objId) (gameObjects gSaved)))
+  ok "gerettet: niemand"              (not (princessInRoom gSaved))
+  -- Kein Wurf, kein Zustandswechsel: `nobodyToSave` faellt in main.hs, aber
+  -- es kann nur der Zweig sein, der den 1/3-Wurf in `handlePrincessSave`
+  -- ueberhaupt erreicht - und der verlangt `princessInRoom`.
+  ok "Rettung nur mit Objekt im Raum"
+      (all (\g -> not (princessInRoom g) || princessId `elem` map objId (gameObjects g))
+           [homeG, riverG, gSaved])
+  ok "Prinzessin lebt an genau einem Ort"
+      (length (filter (\g -> princessInRoom g)
+                      [at (locById i) | i <- map locId gameMap]) == 1)
 
 objById :: Int -> Object
 objById i = case filter ((== i) . objId) objectList of
