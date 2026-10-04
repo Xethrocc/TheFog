@@ -4,8 +4,10 @@
 module Main where
 
 import Data.Array
-import Data.List (sort, isInfixOf, nub)
+import Data.List (sort, isInfixOf, nub, find)
+import Data.Char (toLower)
 import Data.Maybe (fromMaybe)
+import System.Random (mkStdGen)
 import GameTypes
 import GameData
 import GameActions
@@ -19,15 +21,36 @@ ok label False = putStrLn ("  FAIL  " ++ label)
 section :: String -> IO ()
 section s = putStrLn ("\n== " ++ s)
 
--- Minimaler Spielzustand zum Testen
+-- Minimaler Spielzustand zum Testen.
+-- (Plan 3) Fester Seed: dadurch ist jeder Wurf reproduzierbar.
 mkGame :: Game
-mkGame = Game { gameLocation = locById 2
-              , gameCharacter = giveName "Tester"
-              , gameInventory = []
-              , gameObjects = objectList
-              , gameWolves = initialWolves
-              , gameShrineFlags = initialShrineFlags
-              , gamePrincess = initialPrincessStatus }
+mkGame = mkGameWithSeed testSeed
+
+testSeed :: Int
+testSeed = 20240501
+
+mkGameWithSeed :: Int -> Game
+mkGameWithSeed seed = Game { gameLocation = locById 2
+                           , gameCharacter = giveName "Tester"
+                           , gameInventory = []
+                           , gameObjects = objectList
+                           , gameWolves = initialWolves
+                           , gameShrineFlags = initialShrineFlags
+                           , gamePrincess = initialPrincessStatus
+                           , gameStdGen = mkStdGen seed }
+
+-- n Wuerfe ausfuehren und zurueckgeben: der Test prueft die WUERTE, nicht
+-- den Generator.
+rollsIn :: Int -> Int -> Int -> Game -> ([Int], Game)
+rollsIn n lo hi = go n
+  where
+    go 0 g = ([], g)
+    go k g = let (v, g') = rollIn lo hi g
+                 (vs, g'') = go (k - 1) g'
+             in (v : vs, g'')
+
+wHp :: ObjectID -> [Wolf] -> Maybe Life
+wHp wid ws = fmap wolfHp (find ((== wid) . wolfId) ws)
 
 allFlags :: (Bool, Bool, Bool, Bool)
 allFlags = (True, True, True, True)
@@ -144,13 +167,107 @@ main = do
   ok "+Water -> (True,True,True,False)"     (c == (True,True,True,False))
   ok "+Air   -> alle vier"                  (d == (True,True,True,True) && checkEnding d)
 
-  section "Datenintegrität"
+  section "Plan 1: Wolf-HP ueber Flucht hinweg"
+  -- Der Kern des Fixes: der Schaden darf beim `flee` nicht wegfallen.
+  let wounded = persistWolfHp (mkGame) 41 5
+      untouched = mkGame
+      fogWolves = spawnPostFogWolves (gameWolves untouched) allFlags
+      fogWolf = head (filter ((>= 100) . wolfId) fogWolves)
+  ok "Flucht laesst HP stehen (12 -> 5)" (wHp 41 (gameWolves wounded) == Just 5)
+  ok "andere Woelfe unberuehrt"         (wHp 44 (gameWolves wounded) == wHp 44 (gameWolves untouched))
+  ok "setWolfHp greift nur beim Wolf"   (wolfHp (head (gameWolves wounded)) == 30)
+  ok "HP 0 belebt nicht"                (wHp 41 (gameWolves (persistWolfHp (mkGame) 41 0)) == Just 12)
+  ok "HP werden auf Max geklemmt"       (wHp 41 (gameWolves (persistWolfHp (mkGame) 41 999)) == Just 12)
+  -- Die Kampf-Anzeige braucht aktuelle UND maximale LP: vorher stand dort
+  -- (hp, hp), ein angeschlagener Wolf war also "7/7" mit vollem Balken.
+  ok "Kampf zeigt 5/12"                 (wolfFullStats (gameWolves wounded) 41 == (5, 12))
+  ok "Kampf zeigt unversehrt 12/12"     (wolfFullStats (gameWolves untouched) 41 == (12, 12))
+  ok "Guardian 30/30"                   (wolfFullStats (gameWolves untouched) guardianWolfId == (30, 30))
+  ok "alle Wolfs-HP <= Max-HP"          (all (\w -> wolfHp w <= wolfMaxHp w) initialWolves)
+  ok "Nebelwoelfe 30/30"                (wolfHp fogWolf == 30 && wolfMaxHp fogWolf == 30)
+
+  section "Plan 2: Vorwarnung im Nachbarraum"
+  let ws = gameWolves (mkGame)   -- Wolf 44 (Tutorial) steht auf Loc 3
+  -- Von Loc 2 fuehrt der Exit N nach 3 -> Warnung mit Richtung.
+  ok "Loc 2 warnt (Wolf auf 3)"         (checkNeighbourWolf (locById 2) ws)
+  ok "Loc 2 nennt Richtung N"           (neighbourWolfDirs (locById 2) ws == [N])
+  ok "Loc 6 warnt (Wolf auf 3, S)"      (neighbourWolfDirs (locById 6) ws == [S])
+  ok "Loc 1 warnt NICHT"                (not (checkNeighbourWolf (locById 1) ws))
+  ok "Loc 3 selbst: keine Vorwarnung"   (not (checkNeighbourWolf (locById 3) ws))
+  -- Loc 4 (Basement) haengt an Loc 0, nicht an 3 -> ruhig.
+  ok "fremder Raum bleibt ruhig"         (not (checkNeighbourWolf (locById 4) ws))
+  -- Tote Woelfe warnen nicht.
+  ok "toter Wolf warnt nicht"           (not (checkNeighbourWolf (locById 2)
+                                                (map (\w -> w { wolfDead = True }) ws)))
+  -- Geheimweg (Loc 17 -> 28, SE) darf nicht verraten werden: der Wolf steht
+  -- dort, aber SE wird wie in exitNames nicht als Richtung genannt.
+  ok "SE-Richtung bleibt geheim"        (null (neighbourWolfDirs (locById 17) ws))
+  ok "SE-Raum warnt trotzdem"           (checkNeighbourWolf (locById 17) ws)
+  ok "Warntext nennt Richtung"          ("to the north" `isInfixOf` nearbyWolfWarning False [N])
+  ok "Nebel nennt keine Richtung"       (not ("north" `isInfixOf` nearbyWolfWarning True [N]))
+  ok "Nebeltext vorhanden"              ("fog" `isInfixOf` nearbyWolfWarning True [N])
+  ok "Nebel + keine Richtung: kein Absturz" (length (nearbyWolfWarning True []) > 0)
+
+  section "Plan 3: Reproduzierbarer Zufall"
+  let (a, ga) = rollsIn 10 0 5 (mkGameWithSeed testSeed)
+      (b, gb) = rollsIn 10 0 5 (mkGameWithSeed testSeed)
+  ok "gleicher Seed -> gleiche Folge"    (a == b)
+  ok "gleicher Seed -> gleicher Stand"   (ga == gb)
+  -- Fortsetzen muss weiterziehen, nicht wieder von vorn:
+  let (c, _) = rollsIn 5 0 5 ga
+  ok "Fortsetzung != Neustart"           (take 5 a /= c || length (nub a) <= 1)
+  ok "Generator wandert mit"             (gameStdGen ga /= gameStdGen (mkGameWithSeed testSeed))
+  ok "alle Werte im Wuerfelbereich"      (all (\v -> v >= 0 && v <= 5) a)
+  -- Frischer, anderer Seed: andere Folge. Bewusst ueber 30 Woerfe geprueft -
+  -- ein einzelner Wurf waere ein 1/6-Flake-Test.
+  let many = map (\s -> fst (rollsIn 30 0 999 (mkGameWithSeed s))) [1..40]
+  ok "40 Seeds != 1"                    (length (nub many) > 1)
+  ok "gameWithSeed setzt den Generator" (gameStdGen (gameWithSeed 99 (mkGame)) == gameStdGen (mkGameWithSeed 99))
+  ok "Seed fliesst nicht in die LP"     (all (\w -> wolfHp w == wolfMaxHp w) (gameWolves (gameWithSeed 7 (mkGame))))
+
+  section "Punkt 4: Schrein-Inschrift"
+  let insc = [5, 6, 7, 8, 14, 15, 16, 17, 32, 33, 34, 35]   -- Schreine + neue Orte
+      phrase = "Four that wake, one that comes"
+      newObjs = [objById i | i <- [32, 33, 34, 35]]
+  -- (Autor) Der Summit Cairn (34) traegt den Wortlaut nicht mehr, sondern die
+  -- Zahlen "4 and 1". Die Inschrift ist damit weiterhin an allen 12 Orten
+  -- vorhanden, aber nur an 11 im Originalwortlaut - die gemeinsame Formel
+  -- "Cut into the base, worn but still readable:" ist bei den neuen Orten weg.
+  ok "Wortlaut an 11 Orten"             (all (\i -> phrase `isInfixOf` (objectTextFor (objById i))) (filter (/= 34) insc))
+  ok "Inschrift an allen 12 Orten"     (all (\i -> not (null (objectTextFor (objById i)))) insc)
+  ok "Cairn nennt die Zahlen"          ("4 and 1" `isInfixOf` (objectTextFor (objById 34)))
+  ok "Cairn ohne Wortlaut"             (not (phrase `isInfixOf` (objectTextFor (objById 34))))
+  ok "keine Basisformel mehr"          (all (\o -> not ("Cut into the base" `isInfixOf` objectTextFor o)) newObjs)
+  -- Die Orte, an denen die Schreine stehen, tragen sie weiterhin.
+  ok "Schreine unveraendert (5-8)"    (all (\i -> phrase `isInfixOf` (objectTextFor (objById i))) [5, 6, 7, 8])
+  ok "aktivierte Schreine (14-17)"     (all (\i -> phrase `isInfixOf` (objectTextFor (objById i))) [14, 15, 16, 17])
+  -- Die vier neuen Orte: Umkehrpunkte der Route, alle lesbar, nicht
+  -- mitnehmbar (sie gehoeren zum Ort, wie die Schreine).
+  ok "4 neue Inschrift-Objekte"        (length newObjs == 4 && all (\o -> not (null (objectTextFor o))) newObjs)
+  ok "alle lesbar (read+examine)"     (all (\o -> "read" `elem` objActions o && "examine" `elem` objActions o) newObjs)
+  ok "keines mitnehmbar"               (not (any (\o -> any (`elem` objActions o) ["take", "pick"]) newObjs))
+  ok "Orte: 0, 33, 44, 60"             (map objPos newObjs == [0, 33, 44, 60])
+  ok "Orte existieren wirklich"        (all (\o -> any ((== objPos o) . locId) gameMap) newObjs)
+  ok "Objekte auffindbar (Name)"       (all (\o -> fmap objId (getObjectInList (map toLower (objName o))
+                                                            (gameObjects (mkGame))) == Just (objId o)) newObjs)
+  -- Namenseindeutigkeit: `getObjectInList` faellt bei Gleichstand auf den
+  -- ersten Listeneintrag zurueck, ein doppelter Name macht ein Objekt
+  -- unerreichbar. Stone/Broken/Tomb Tablet sind bereits vergeben.
+  ok "Objektnamen eindeutig"           (length (map objName objectList) == length (nub (map objName objectList)))
+  ok "Objektnamen eindeutig (lower)"   (length (map (map toLower . objName) objectList)
+                                        == length (nub (map (map toLower . objName) objectList)))
+  ok "Neue Namen kommen nur einmal vor" (all (\o -> length (filter ((== objName o) . objName) objectList) == 1) newObjs)
+
+  section "Datenintegritaet"
   ok "jede Location per locById"      (all (\l -> locName (locById (locId l)) == locName l) gameMap)
   ok "gameMap = 0..60 ohne Loc 5"     (sort (map locId gameMap) == [0,1,2,3,4] ++ [6..60])
   ok "Loc 5 wirklich entfernt"        (null (filter ((== 5) . locId) gameMap))
   ok "descr[5] existiert trotzdem"    (inRange (bounds descr) 5 && length (descr ! 5) > 0)
   ok "jedes Objekt hat objectText"    (all (\o -> inRange (bounds objectText) (objId o) && length (objectTextFor o) > 0) objectList)
-  ok "objectText dicht 0..31"         (and [inRange (bounds objectText) i && hasDef i | i <- [0..31]])
+  -- (Punkt 4) Die obere Grenze kommt aus `bounds objectText` statt aus einer
+  -- festen 31 - sonst waere jeder neue Content-Eintrag ein stiller Bruch.
+  ok "objectText dicht"               (let (lo, hi) = bounds objectText
+                                         in and [inRange (bounds objectText) i && hasDef i | i <- [lo..hi]])
   -- Regression: Wolf- und Objekt-IDs teilten sich frueher den Nummernraum,
   -- wodurch `examine Wolf (Guardian)` den Text von Object 0 ausgab.
   ok "keine Wolf-ID kollidiert mit Objekt-ID"

@@ -8,7 +8,7 @@ import GameConstants
 import Data.Maybe (isJust, isNothing, fromMaybe)
 import Data.Char (isSpace, toLower)
 import System.IO (isEOF)
-import System.Random (newStdGen, randomR)
+import System.Random (newStdGen)
 
 main :: IO ()
 main = do
@@ -81,26 +81,28 @@ handleMovement game direction =
 -- auf einen Biss (roh 1-3).
 -- (A3) Der Biss laeuft jetzt durch `damage` und benutzt `getDef`. Vorher
 -- wurden die Verteidigung des Helden komplett ignoriert.
+-- (Plan 3) Beide Wuerfe laufen ueber `rollIn`, damit sie die Zufallsfolge
+-- des Spiels verbrauchen und reproduzierbar bleiben.
 maybeBite :: Game -> IO Game
-maybeBite game
-    | any (\w -> wolfLoc w == locId (gameLocation game) && not (wolfDead w)) (gameWolves game) = do
-        chance <- roll 0 1
+maybeBite game0
+    | any (\w -> wolfLoc w == locId (gameLocation game0) && not (wolfDead w)) (gameWolves game0) = do
+        let (chance, g1) = rollIn 0 1 game0
         if chance == (1 :: Int)
             then do
-                raw <- roll 1 3
-                let char = gameCharacter game
+                let (raw, g2) = rollIn 1 3 g1
+                    char = gameCharacter g2
                     dmg = damage raw (getDef char)
                 putStrLn ("A wolf lunges from the shadows and bites you for " ++ show dmg ++ "!\n")
-                return game { gameCharacter = char { charLife = max 0 (getHP char - dmg) } }
-            else return game
-    | otherwise = return game
+                return g2 { gameCharacter = char { charLife = max 0 (getHP char - dmg) } }
+            else return g1
+    | otherwise = return game0
 
 -- (AUTOR-DESIGN) Die Prinzessin überlebt die Rettung nur in 1/3 der Fälle
 -- (2/3 ertrinken). Bei Erfolg verschwindet sie aus der Objektliste; nach
 -- ihrem Tod bleibt sie liegen, weitere Rettungsversuche sind blockiert.
 handlePrincessSave :: Game -> Object -> IO Game
-handlePrincessSave game obj = do
-    r <- roll 1 3
+handlePrincessSave game0 obj = do
+    let (r, game) = rollIn 1 3 game0
     if r == (1 :: Int)
         then do
             putStrLn "You dive into the river and guide the princess to safety!\n"
@@ -153,11 +155,10 @@ handleFight game obj = do
     result <- fightLoop fightGame obj enemyHP enemyMaxHP
     return result { gameLocation = homeLoc }
 
--- (Fix 9) Wuerfel-Helfer fuer variablen Schaden
-roll :: Int -> Int -> IO Int
-roll lo hi = do
-    gen <- newStdGen
-    return (fst (randomR (lo, hi) gen))
+-- (Plan 3) Alle Wuerfe laufen ueber `rollIn` (GameActions). Das Spiel
+-- braucht hier kein eigenen Wuerfel mehr - der Generator steckt in
+-- `gameStdGen` und wandert mit dem Zustand mit.
+--
 
 -- Kampfsystem.
 --
@@ -172,6 +173,13 @@ roll lo hi = do
 --
 -- (B5) Im Nebel zieht `advanceTurn` zusaetzlich 1 LP ab - auch mitten im
 --      Kampf. Der Nebel-Todesmarsch laesst sich also nicht auskämpfen.
+--
+-- (Plan 1) Der Wolf behaelt den Schaden: `enemyHP` wird bei JEDEM Ausstieg
+--      aus der Runde ueber `persistWolfHp` zurueckgeschrieben. Vorher gingen
+--      alle Treffer bei `flee` verloren - der Wolf war danach unversehrt.
+--
+-- (Plan 3) Alle Wuerfe laufen ueber `rollIn`, der Generator wandert als
+--      Zustand mit. Ein Kampf ist damit vollstaendig reproduzierbar.
 fightLoop :: Game -> Object -> Life -> Life -> IO Game
 fightLoop game@Game{gameLocation = location, gameCharacter = character} object enemyHP enemyMaxHP = do
     putStrLn ("________________________________________________________________________________")
@@ -201,39 +209,50 @@ fightLoop game@Game{gameLocation = location, gameCharacter = character} object e
     -- `verb` ist kleingeschrieben, also direkt vergleichen.
     -- (Fix) EOF: der Kampf bricht sauber ab, die Hauptschleife meldet "Bye!".
     if isNothing minput
-        then return game
+        then return (persistWolfHp game (objId object) enemyHP)
         else if verb `elem` quitFight
         then do
             putStrLn "You fled from the fight!\n"
             -- (A4) Flucht kostet einen Zug, ist aber nie blockiert -
             -- der Anti-Softlock gegen mehrere Wölfe im Raum.
-            return (advanceTurn game)
+            -- (Plan 1) Der Wolf bleibt angeschlagen.
+            return (advanceTurn (persistWolfHp game (objId object) enemyHP))
         else if verb `elem` ["attack", "hit"]
             then do
-                pBonus <- roll 0 2
-                let (wAtk, wDef) = wolfCombatStats (gameWolves game) (objId object)
+                let (pBonus, g1) = rollIn 0 2 game
+                    (wAtk, wDef) = wolfCombatStats (gameWolves g1) (objId object)
                     playerDmg = max 1 (getAtk character + pBonus - wDef)
                     newEnemyHP = enemyHP - playerDmg
                 if newEnemyHP <= 0
                     then do
                         putStrLn "You Won! Press 'Enter' to continue"
                         _ <- readLine
-                        let updatedObjList = attackObj object (gameObjects game)
+                        let updatedObjList = attackObj object (gameObjects g1)
                             killWolf w = if wolfId w == objId object then w { wolfDead = True } else w
-                        return game { gameObjects = updatedObjList
-                                    , gameWolves = map killWolf (gameWolves game) }
+                        return g1 { gameObjects = updatedObjList
+                                  , gameWolves = map killWolf (gameWolves g1) }
                     else do
-                        wBonus <- roll 0 2
-                        let wolfDmg = damage (wAtk + wBonus) (getDef character)
-                            newHP = getHP character - wolfDmg
+                        -- (Plan 3) Der Rueckschlag wird erst nach dem
+                        -- Spielerangriff gewuerfelt. Damit bleibt die
+                        -- Zufallsfolge identisch zum alten Ablauf: ein
+                        -- gewonnener Kampf verbraucht genau einen Wurf.
+                        let (wBonus, g2) = rollIn 0 2 g1
+                            char2 = gameCharacter g2
+                            wolfDmg = damage (wAtk + wBonus) (getDef char2)
+                            newHP = getHP char2 - wolfDmg
                             counter = if wolfDmg == 0
                                         then "The " ++ getObjStr object ++ " strikes, and the shield holds."
                                         else "The " ++ getObjStr object ++ " hits back for " ++ show wolfDmg ++ "!"
                         putStrLn ("You hit for " ++ show playerDmg ++ "! " ++ counter ++ "\n")
+                        -- (Plan 1) Der Schaden bleibt am Wolf - auch wenn der
+                        -- Held dabei stirbt, er soll nicht im letzten Moment
+                        -- noch geheilt werden.
+                        let fought = (persistWolfHp g2 (objId object) newEnemyHP)
+                                     { gameCharacter = char2 { charLife = newHP } }
                         if newHP <= 0
-                            then return game { gameCharacter = character { charLife = 0 } }
+                            then return fought { gameCharacter = char2 { charLife = 0 } }
                             else do
-                                let after = advanceTurn (game { gameCharacter = character { charLife = newHP } })
+                                let after = advanceTurn fought
                                 if getHP (gameCharacter after) <= 0
                                     then return after
                                     else fightLoop after object newEnemyHP enemyMaxHP
@@ -289,7 +308,17 @@ gameLoop' game@Game{gameLocation = location, gameCharacter = character, gameInve
             putStrLn "WARNING: A wolf is nearby!"
             setSGR [Reset]
             putStrLn ""
-        else putStrLn ""
+        -- (Plan 2) Vorwarnung: ein Wolf im direkt angrenzenden Raum. Die
+        -- rote Warnung hat Vorrang - sie ist konkreter. Im Nebel nennt die
+        -- Meldung keine Richtung, dort ist jeder Weg eine Lotterie.
+        else if checkNeighbourWolf location wolves
+            then do
+                setSGR [SetColor Foreground Vivid Yellow]
+                putStrLn (nearbyWolfWarning (fogActive game)
+                                            (neighbourWolfDirs location wolves))
+                setSGR [Reset]
+                putStrLn ""
+            else putStrLn ""
 
     putStrLn ("Usable Objects:\n")
     setSGR [SetColor Foreground Vivid Red]
@@ -454,11 +483,15 @@ game = do
     putStrLn ("Whats Your (Character) Name?")
     minput <- readLine
     let charName = fromMaybe "" minput   -- leer/EOF -> "Hero" (giveName)
+    gen <- newStdGen
     gameLoop Game { gameLocation = locById 53
                   , gameCharacter = giveName charName
                   , gameInventory = initialInventory
                   , gameObjects = objectList
                   , gameWolves = initialWolves
                   , gameShrineFlags = initialShrineFlags
-                  , gamePrincess = initialPrincessStatus }
+                  , gamePrincess = initialPrincessStatus
+                  -- (Plan 3) Startseed fuer diese Partie. Fuer Tests und
+                  -- Checkpoints stattdessen `gameWithSeed`.
+                  , gameStdGen = gen }
     return ()

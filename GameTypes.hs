@@ -1,5 +1,8 @@
 module GameTypes where
 
+-- (Plan 3) Der Zufallsgenerator ist Teil des Spielzustands (siehe `Game`).
+import System.Random (StdGen)
+
 data Direction = N|O|S|W|SE deriving (Eq,Show,Enum,Ord)
 type LocString = String
 
@@ -52,6 +55,11 @@ data Wolf = Wolf {
     wolfPathIndex :: Int,
     wolfGuardian :: Bool,
     wolfHp :: Int,
+    -- (Plan 1) Getrennt von `wolfHp`: die LP des Wolfs sinken im Kampf,
+    -- die Max-LP sind konstant. Ohne dieses Feld lieferte `wolfFullStats`
+    -- (hp, hp), wodurch ein angeschlagener Wolf mit einem vollen HP-Balken
+    -- und 12/12 LP angezeigt wurde und der Fortschritt unsichtbar war.
+    wolfMaxHp :: Int,
     wolfAttack :: Int,
     wolfDefense :: Int,
     wolfDead :: Bool
@@ -68,5 +76,15 @@ data Game = Game {
     gameObjects     :: ObjectList,
     gameWolves      :: [Wolf],
     gameShrineFlags :: (Bool, Bool, Bool, Bool),
-    gamePrincess    :: PrincessStatus
+    gamePrincess    :: PrincessStatus,
+    -- (Plan 3) Der Generator IST Zustand. Vorher zog `roll` (main.hs) fuer
+    -- jeden Wurf eine frische `newStdGen`: derselbe Befehlsstrom ergab jedes
+    -- Mal einen anderen Kampf, und Tests konnten den Kampfverlauf ueberhaupt
+    -- nicht pruefen. Mit dem Generator im Spiel zaehlt die Zufallsfolge von
+    -- `gameWithSeed` an - gleicher Seed + gleiche Befehle = gleicher Kampf.
+    --
+    -- `deriving Show` funktioniert, weil random >= 1.3 wieder einen
+    -- Show-Instanz fuer StdGen mitbringt. Mit random 1.2 muesste man
+    -- `instance Show Game` von Hand schreiben.
+    gameStdGen      :: StdGen
 } deriving (Eq, Show)

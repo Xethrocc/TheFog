@@ -108,15 +108,18 @@ gameMap =
 -- Ein leerer wolfPath bedeutet: steht still. Das nutzen die Nebelwoelfe
 -- (IDs 100-107), die statische Gefahren an ihren Spawn-Orten sind.
 -- ---------------------------------------------------------------------------
+-- (Plan 1) Jeder Wolf wird mit aktuellen UND maximalen LP angelegt - wie
+-- beim Helden (charLife/charMaxLife). Die beiden Werte sind am Anfang
+-- gleich, fallen aber auseinander, sobald der Wolf Schaden nimmt.
 initialWolves :: [Wolf]
 initialWolves =
-  [ Wolf 40 28 []                              0 True  30  8  2 False  -- Guardian, Earth Shrine
-  , Wolf 41 13 [13,15,16,21,20,19,18,14]       0 False 12  8  1 False
-  , Wolf 42 17 [17,20,21,16,15,13,14,18,19,20] 0 False 12  9  1 False
-  , Wolf 43 23 [23,20,19,18,14,13,15,16,21,20] 0 False 12  7  2 False
-  , Wolf 44  3 []                              0 False 12  8  1 False  -- Tutorial-Wolf auf dem Weg
-  , Wolf 45 36 []                              0 False 20  9  2 False  -- Castle Guard
-  , Wolf 46 58 []                              0 False 24 10  3 False  -- Crypt Warden
+  [ Wolf 40 28 []                              0 True  30  30  8  2 False  -- Guardian, Earth Shrine
+  , Wolf 41 13 [13,15,16,21,20,19,18,14]       0 False 12  12  8  1 False
+  , Wolf 42 17 [17,20,21,16,15,13,14,18,19,20] 0 False 12  12  9  1 False
+  , Wolf 43 23 [23,20,19,18,14,13,15,16,21,20] 0 False 12  12  7  2 False
+  , Wolf 44  3 []                              0 False 12  12  8  1 False  -- Tutorial-Wolf auf dem Weg
+  , Wolf 45 36 []                              0 False 20  20  9  2 False  -- Castle Guard
+  , Wolf 46 58 []                              0 False 24  24 10  3 False  -- Crypt Warden
   ]
 
 -- ---------------------------------------------------------------------------
@@ -202,7 +205,31 @@ objectList =
        Object {objPos = 56, objId = 28, objName = "Pale Fungus", objDescription = "A fungus growing out of the bone dust", objActions = ["examine","take","pick"]},
        Object {objPos = 58, objId = 29, objName = "Tomb Tablet", objDescription = "A tablet propped against the tomb, face down", objActions = ["read","examine","take","pick"]},
        Object {objPos = 60, objId = 30, objName = "Sack of Grain", objDescription = "A sack of grain, packed and left to keep", objActions = ["examine","take","pick"]},
-       Object {objPos = 60, objId = 31, objName = "Old Coin", objDescription = "A coin from a country nobody here has heard of", objActions = ["examine","take","pick"]}
+       Object {objPos = 60, objId = 31, objName = "Old Coin", objDescription = "A coin from a country nobody here has heard of", objActions = ["examine","take","pick"]},
+
+       -- (Punkt 4) Die Schrein-Inschrift an vier weiteren Orten.
+       --
+       -- Bisher stand "Four that wake, one that comes." ausschliesslich an
+       -- den vier Schreinen (IDs 5-8) und ihren aktivierten Abbildern
+       -- (14-17). Der Spieler begegnete der Zeile also nur dort, wo ohnehin
+       -- 'activate' moeglich war - dort war sie ein Hinweis, nirgends sonst
+       -- eine Warnung.
+       --
+       -- Die vier Orte sind bewusst die Umkehrpunkte der Route: der Ausgang
+       -- (0), der Fluss (33), der Gipfel (44) und das versiegelte Verlies
+       -- (60). Wer der Zeile folgt, laeuft nach wie vor an den Schreinen
+       -- vorbei - sie kuemmert sich nicht um sie.
+       --
+       -- Alle vier sind NICHT mitnehmbar (kein "take"): sie gehoeren zum Ort.
+       -- Genau wie die Schreine sind sie ueber "read" und "examine" lesbar.
+       --
+       -- Die Namen muessen eindeutig sein: `getObjectInList` faellt bei
+       -- Gleichstand auf den ersten Listeneintrag zurueck, und "Stone
+       -- Tablet"/"Broken Tablet"/"Tomb Tablet" sind bereits vergeben.
+       Object {objPos = 0, objId = 32, objName = "Door Lintel", objDescription = "The beam above your own front door, carved with small letters", objActions = ["read","examine"]},
+       Object {objPos = 33, objId = 33, objName = "River Stone", objDescription = "A flat stone in the riverbed, with the same words on its upper face", objActions = ["read","examine"]},
+       Object {objPos = 44, objId = 34, objName = "Summit Cairn", objDescription = "Someone stacked these stones, and carved the bottom one", objActions = ["read","examine"]},
+       Object {objPos = 60, objId = 35, objName = "Vault Door", objDescription = "The seal on the vault door is carved, not written", objActions = ["read","examine"]}
        ]
 
 -- C5b: Help liegt ab Spielstart im Inventar und ist damit ueberall lesbar.
@@ -212,11 +239,16 @@ initialInventory :: Inventory
 initialInventory = [ o | o <- objectList, objId o == 13 ]
 
 -- ---------------------------------------------------------------------------
--- Objekt-Texte. Bounds (0,31): JEDER Index muss belegt sein, weil
+-- Objekt-Texte. Bounds (0,35): JEDER Index muss belegt sein, weil
 -- `objectTextFor` sonst ein undefiniertes Array-Element trifft.
+--
+-- Punkt 4 hat die Obergrenze von 31 auf 35 angehoben (IDs 32-35 sind die
+-- Inschrift-Objekte). Die Tests lesen die Grenze jetzt aus `bounds` und
+-- nicht mehr aus einer fest verdrahteten 31 - sonst waere der naechste
+-- Content-Eintrag wieder ein stiller Bruch.
 -- ---------------------------------------------------------------------------
 objectText :: Array ObjectID String
-objectText = array (0,31) [
+objectText = array (0,35) [
        (0,"           .-.---------------------------------------.-.  "
         ++ "\n          ((o))                                         ) "
         ++ "\n           \\U/_________          _______         ______/  "
@@ -298,7 +330,11 @@ objectText = array (0,31) [
        (28,"A fungus out of the bone dust. It gives off a faint, cold light."),
        (29,"A tablet propped against the tomb, face down, as if someone did not want to read it.\nThe dust around it is disturbed.\nSomeone turned it over, read it, and turned it back."),
        (30,"A sack of grain, packed and left to keep. The rats went through the top of it and no further.\nUnderneath, the grain is dry. Someone was preparing for a long wait."),
-       (31,"A coin from a country nobody here has heard of. The face on it has been worn smooth by somebody's thumb.")
+       (31,"A coin from a country nobody here has heard of. The face on it has been worn smooth by somebody's thumb."),
+       (32,"The beam above your own front door. The letters are worn soft by weather, but they were cut deep.\n'Four that wake, one that comes.'"),
+       (33,"A flat stone in the riverbed with the same words 'Four that wake, one that comes.' on its upper face.\nThe current has been over it a long time. The water has not worn them out. That is the part that bothers you."),
+       (34,"Someone stacked these stones, and carved the bottom one. The stack is too careful to be accidental.\nThe numbers 4 and 1 are carved into that one stone.\nFrom up here you can see the forest, the castle, and the canyon. The four shrines are not visible from this side."),
+       (35,"The seal on the vault door is carved, not written.\nLetters on the Door's frame say 'Four that wake, one that comes.'")
        ]
 
 -- ---------------------------------------------------------------------------

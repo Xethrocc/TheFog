@@ -3,6 +3,9 @@ module GameActions where
 import Data.List
 import Data.Array (bounds, (!))
 import Data.Ix (inRange)
+import Data.Char (toLower)
+import Data.Maybe (mapMaybe)
+import System.Random (mkStdGen, randomR)
 import GameTypes
 import GameData
 import GameConstants
@@ -52,6 +55,103 @@ checkEncounter loc = any (wolfFound loc)
   where
     wolfFound loc w = wolfLoc w == locId loc && not (wolfDead w)
 
+-- ---------------------------------------------------------------------------
+-- (Plan 3) Zufall als Teil des Spielzustands
+-- ---------------------------------------------------------------------------
+-- Vorher stand in main.hs `roll lo hi = newStdGen >>= \\(value, _) ->
+-- return value`: JEDER Wurf startete eine neue, frische Zufallsfolge. Der
+-- Kampfverlauf haengte damit nicht vom Spielstand ab - derselbe
+-- Befehlsstrom ergab jedes Mal etwas anderes, und Tests konnten den Kampf
+-- ueberhaupt nicht nachstellen.
+--
+-- `rollIn` zieht aus `gameStdGen` und legt den fortgeschrittenen Generator
+-- zurueck: gleicher Seed + gleiche Befehle => gleiches Ergebnis.
+--
+-- Bewusst in GameActions und nicht in main.hs: Tests.hs kann main.hs nicht
+-- importieren (es ist ein Main-Modul). Mit dieser Verschiebung ist die
+-- Zufallsfolge pruefbar.
+rollIn :: Int -> Int -> Game -> (Int, Game)
+rollIn lo hi game = (value, game { gameStdGen = next })
+  where
+    (value, next) = randomR (lo, hi) (gameStdGen game)
+
+-- Spielstand mit festem Seed. `game` (main.hs) benutzt `newStdGen`; Tests
+-- und kuenftige Checkpoints (Plan 5) setzen hier einen festen Wert.
+gameWithSeed :: Int -> Game -> Game
+gameWithSeed seed game = game { gameStdGen = mkStdGen seed }
+
+-- ---------------------------------------------------------------------------
+-- (Plan 2) Wolf-Vorwarnung fuer Nachbarräume
+-- ---------------------------------------------------------------------------
+-- Bisher warnte `checkEncounter` ausschliesslich bei einem Wolf IM aktuellen
+-- Raum. Ein Wolf, der durch den Nachbarraum patrouilliert, war voellig
+-- unsichtbar - bis er im nächsten Zug zuschlug. Der Spieler bekam keine
+-- Gelegenheit, den Weg zu wechseln oder den Kampf vorzubereiten.
+--
+-- Die Warnung nennt die Richtung, damit sie handlungsrelevant ist. Ob ein
+-- Wolf im Nebel anders behandelt wird, entscheidet `nearbyWolfWarning`.
+neighbourWolves :: Location -> [Wolf] -> [Wolf]
+neighbourWolves loc = filter inNeighbour
+  where
+    neighbours = map fst (locExits loc)
+    inNeighbour w = not (wolfDead w) && wolfLoc w `elem` neighbours
+
+-- Steht mindestens ein lebender Wolf in einem direkt angrenzenden Raum?
+checkNeighbourWolf :: Location -> [Wolf] -> Bool
+checkNeighbourWolf loc = not . null . neighbourWolves loc
+
+-- In welche Richtung(en) liegt ein Wolf? Fuer die Warnanzeige.
+--
+-- `SE` wird wie in `exitNames` weggelassen: der geheime Durchgang ist eine
+-- Belohnung und darf nicht durch eine Warnung verraten werden. Steht der Wolf
+-- ausschliesslich hinter dem geheimen Zugang, bleibt es bei der
+-- richtungslosen Variante der Warnung.
+neighbourWolfDirs :: Location -> [Wolf] -> [Direction]
+neighbourWolfDirs loc wolves =
+    mapMaybe visible (locExits loc)
+  where
+    visible (target, dir)
+        | dir /= SE && any (isIn target) wolves = Just dir
+        | otherwise                              = Nothing
+    isIn target w = not (wolfDead w) && wolfLoc w == target
+
+-- Text der Nachbarraum-Warnung. Im Nebel wird die Richtung bewusst NICHT
+-- verraten - dann ist jeder Weg eine Lotterie, das passt zum Todesmarsch.
+nearbyWolfWarning :: Bool -> [Direction] -> String
+nearbyWolfWarning inFog dirs
+    | inFog     = "Something is breathing just beyond the fog. It is close."
+    | otherwise = case dirs of
+        [] -> "Something moves close by."
+        [d] -> "You hear a wolf close by, to the " ++ lower (directionName d) ++ "."
+        _ -> "You hear wolves close by, to the "
+             ++ intercalate " and the " (map (lower . directionName) dirs) ++ "."
+  where
+    lower = map toLower
+
+-- ---------------------------------------------------------------------------
+-- (Plan 1) Wolf-HP ueber die Flucht hinweg behalten
+-- ---------------------------------------------------------------------------
+-- `fightLoop` (main.hs) rechnet die Wolf-HP in einem Parameter (`enemyHP`),
+-- nicht im Spielzustand. Dieser Parameter wurde beim `flee` einfach
+-- weggeworfen: nach fuenf Treffern und einer Flucht stand der Wolf wieder mit
+-- vollen 12/12 LP da und der Kampf bis zum Neuangriff umsonst.
+--
+-- `setWolfHp` schreibt den Zwischenstand zurueck. Zwei Guard-Bedingungen:
+--   * `hp > 0`  - ein toter Wolf wird nicht wiederbelebt (den Sieg-Fall
+--                  setzt main.hs ueber `wolfDead`).
+--   * `min wolfMaxHp` - die LP koennen die Max-LP nicht uebersteigen.
+setWolfHp :: ObjectID -> Life -> [Wolf] -> [Wolf]
+setWolfHp wid hp = map upd
+  where
+    upd w | wolfId w == wid && hp > 0 = w { wolfHp = min (wolfMaxHp w) hp }
+          | otherwise                = w
+
+-- Kampfstand eines Wolfs in den Spielzustand zurueckschreiben. Wird bei
+-- Flucht, Kampf-Abbruch (EOF) und Tod des Helden benutzt - in allen drei
+-- Faellen hat der Wolf den Schaden behalten.
+persistWolfHp :: Game -> ObjectID -> Life -> Game
+persistWolfHp game wid hp = game { gameWolves = setWolfHp wid hp (gameWolves game) }
+
 -- Check ending condition
 checkEnding :: (Bool, Bool, Bool, Bool) -> Bool
 checkEnding (e, w, f, a) = e && w && f && a
@@ -73,11 +173,13 @@ wolfCombatStats wolves wid = case find (\w -> wolfId w == wid) wolves of
     Nothing -> (8, 2)
 
 -- Vollstaendige Wolf-Stats inkl. maximaler LP, fuer die Kampf-Anzeige.
--- `enemyHP` war fest auf 12 verdrahtet, wodurch der Guardian mit 12/30 HP
--- und die HP-Balken mit hart kodierten 30 angezeigt wurden.
+-- (Plan 1) Die Max-LP kommen aus `wolfMaxHp`, nicht mehr aus dem aktuellen
+-- Stand. Vorher stand hier `(hp, hp)`: ein Wolf, der nach einem Kampf noch
+-- 7 LP hatte, wurde mit "7/7" und einem vollen Balken angezeigt - der
+-- angerichtete Schaden war unsichtbar, obwohl er im Zustand stand.
 wolfFullStats :: [Wolf] -> ObjectID -> (Life, Life)
 wolfFullStats wolves wid = case find (\w -> wolfId w == wid) wolves of
-    Just w  -> (wolfHp w, wolfHp w)
+    Just w  -> (wolfHp w, wolfMaxHp w)
     Nothing -> (12, 12)
 
 -- Add new wolves after fog descends
@@ -88,22 +190,14 @@ spawnPostFogWolves :: [Wolf] -> (Bool, Bool, Bool, Bool) -> [Wolf]
 spawnPostFogWolves wolves flags =
     if checkEnding flags && not (any (\w -> wolfId w >= postFogWolfIdBase) wolves)
         then let locations = postFogWolfLocations
-                 baseStats = getWolfStats flags
+                 (hp, atk, def) = getWolfStats flags
+                 -- (Plan 1) Nebelwoelfe starten mit vollen LP, also sind
+                 -- aktuelle und maximale LP identisch.
                  newWolf loc id = Wolf id loc [] 0 False
-                                            (fst3 baseStats) (snd3 baseStats) (thd3 baseStats) False
+                                            hp hp atk def False
              in wolves ++ zipWith newWolf locations
                                   [postFogWolfIdBase .. postFogWolfIdBase + length locations - 1]
         else wolves
-
--- Helper for triple tuples
-fst3 :: (a, b, c) -> a
-fst3 (x, _, _) = x
-
-snd3 :: (a, b, c) -> b
-snd3 (_, y, _) = y
-
-thd3 :: (a, b, c) -> c
-thd3 (_, _, z) = z
 -- ---------------------------------------------------------------------------
 -- (A6) Objekte nach `objId` loeschen, nicht nach Strukturgleichheit.
 -- `delete` verglich ALLE Felder inklusive `objActions`. Heute harmlos,

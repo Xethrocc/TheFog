@@ -9,3 +9,8 @@ fix-plan.md
 *.hi
 *.o
 dist-newstyle/
+
+# Planungsdatei dieser Sitzung. In .gitignore ist `\` kein Escape-Zeichen,
+# `\\.next-plan\\.md` passte also auf gar nichts - daher war die Datei trotz
+# Regel als untracked sichtbar.
+.next-plan.md
