@@ -381,10 +381,84 @@ main = do
   let fled = persistWolfHp (snd (fleeSucceeds mkGame)) 41 5
   ok "HP bleiben auch nach Flucht"    (wHp 41 (gameWolves fled) == Just 5)
 
+  section "Punkt 4: Beute der Woelfe"
+  let drops = dropFoodTemplates
+      dropIds' = map objId drops
+  -- IDs ab 36: alles darunter ist vergeben, 32-35 sind die Inschriften.
+  ok "IDs passen zu wolfDropIds"     (dropIds' == map fst wolfDropIds)
+  ok "IDs sind >= 36 und ohne Luecke" (dropIds' == [36 .. 38])
+  ok "jede ID hat einen objectText"  (all (\i -> inRange (bounds objectText) i
+                                                && length (objectTextFor (objObjById i)) > 0) dropIds')
+  ok "alle sind essbar"               (all (\i -> isFood i && foodValue i /= Nothing) dropIds')
+  ok "alle sind mitnehmbar"           (all (\o -> any (`elem` objActions o) ["take", "pick"]) drops)
+  -- `getObjectInList` faellt bei Gleichstand auf den ersten Treffer zurueck:
+  -- ein doppelter Name (auch nur in der Kleinschreibung) macht ein Objekt
+  -- unerreichbar. Die Beute liegt in `objectList` nicht, aber sie kann in
+  -- denselben Raum wie die Welt-Nahrung.
+  let allNames = map objName (objectList ++ drops)
+      lNames   = map (map toLower . objName) (objectList ++ drops)
+  ok "Beute-Namen eindeutig"         (length allNames == length (nub allNames))
+  ok "Beute-Namen eindeutig (lower)" (length lNames == length (nub lNames))
+  ok "Beute heisst nicht 'food'"      (all (\o -> objName o /= "food") drops)
+  ok "foodName kennt die Beute"       (all (\o -> foodName (objId o) == objName o) drops)
+  -- Nur die drei Kaempfe, die dem Spieler wirklich etwas kosten.
+  ok "Guardian, Guard, Warden"       (all dropsFrom [guardianWolfId, castleGuardId, cryptWardenId])
+  ok "Tutorial-Wolf gibt nichts"     (not (dropsFrom tutorialWolfId))
+  ok "Patrouillenwoelfe geben nichts" (not (any dropsFrom [41, 42, 43]))
+  ok "Nebelwoelfe geben nichts"       (not (any dropsFrom [100, 101, 107]))
+  -- Ort, Heilswert und Vorlage muessen zusammenpassen.
+  let wardens = [(guardianWolfId, 28), (castleGuardId, 36), (cryptWardenId, 58)]
+      landed s wid = let (ds, _) = wolfDrop (gameWithSeed s mkGame) wid in ds
+      allDrops s = concat [landed s w | (w, _) <- wardens]
+      seeds4 = [1 .. 120]
+      tries = length seeds4 * length wardens
+      landedIds = concat [map objId (landed s w) | s <- seeds4, (w, _) <- wardens]
+      okDrop s w loc = let (ds, _) = wolfDrop (gameWithSeed s mkGame) w
+                       in all (\d -> objPos d == loc && objId d `elem` dropIds') ds
+      hits = length landedIds
+  ok "Beute faellt ueberhaupt"       (hits > 0)
+  ok "Beute faellt nicht jedes Mal"  (hits < tries)
+  -- Band weit genug fuer keinen Flake: Binomial(360, 1/4) hat sd ~8.2,
+  -- hier wird nur "nicht 0 und nicht alles" plus Groessenordnung geprueft.
+  ok "flaechentreu (1 von 4)"        (hits > tries `div` 8 && hits < tries `div` 2)
+  -- Die Beute liegt IMMER dort, wo der Wolf stand.
+  ok "Beute liegt am Ort des Wolfs"  (all (\s -> all (\(w, l) -> okDrop s w l) wardens) seeds4)
+  ok "vor dem Wolf: -1, nicht 0"     (all ((== (-1)) . objPos) drops)
+  -- Reproduzierbar (Plan 3): gleicher Seed, gleiche Beute.
+  ok "gleicher Seed -> gleiche Beute"
+      (all (\s -> map objId (allDrops s) == map objId (allDrops s)) seeds4)
+  ok "120 Seeds -> mehr als ein Bild" (length (nub (map (map objId . allDrops) seeds4)) > 1)
+  -- Ohne passenden Wolf: kein Wurf, unveraenderter Generator.
+  let noDrop g = wolfDrop g tutorialWolfId
+  ok "falscher Wolf: keine Beute"    (fst (noDrop mkGame) == [])
+  ok "falscher Wolf: kein Wurf"      (gameStdGen (snd (noDrop mkGame)) == gameStdGen mkGame)
+  -- `attackObj` legt ohnehin eine Leiche an: die Beute kommt daneben, nicht
+  -- an ihre Stelle.
+  let (ds, _) = wolfDrop (gameWithSeed 2 mkGame) guardianWolfId
+      corpse = wolfToObj (head (filter ((== guardianWolfId) . wolfId) initialWolves))
+      after  = attackObj corpse (ds ++ gameObjects mkGame)
+  ok "Beute ersetzt die Leiche nicht"
+      (length (filter (\o -> objId o `elem` dropIds') after) == length ds)
+  ok "Leiche liegt auch dort"        (any (\o -> objPos o == 28 && isPrefixOf' "dead" (objName o)) after)
+
 objById :: Int -> Object
 objById i = case filter ((== i) . objId) objectList of
               (o:_) -> o
               []    -> Object { objPos = -1, objId = i, objName = "?MISSING?", objDescription = "", objActions = [] }
+
+-- Wie `objById`, aber ueber beide Objekt-Quellen: `objById` kennt nur
+-- `objectList` und wuerde fuer die Wolf-Beute (IDs 36-38) "?MISSING?"
+-- liefern - und damit jeden Texttest darueber scheitern lassen.
+objObjById :: Int -> Object
+objObjById i = case filter ((== i) . objId) (objectList ++ dropFoodTemplates) of
+                 (o:_) -> o
+                 []    -> Object { objPos = -1, objId = i, objName = "?MISSING?", objDescription = "", objActions = [] }
+
+-- `Data.List.isPrefixOf` gibt es erst ab base 4.18.
+isPrefixOf' :: String -> String -> Bool
+isPrefixOf' [] _ = True
+isPrefixOf' _ [] = False
+isPrefixOf' (x:xs) (y:ys) = x == y && isPrefixOf' xs ys
 
 hasDef :: Int -> Bool
 hasDef i = i `elem` [ fst e | e <- assocs objectText ]

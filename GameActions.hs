@@ -178,6 +178,56 @@ fleeSucceeds game
     | otherwise      = let (r, g) = rollIn 0 fleeChance game in (r == fleeChance, g)
 
 -- ---------------------------------------------------------------------------
+-- (Punkt 4) Ein getoeteter Wolf laesst manchmal etwas fallen
+-- ---------------------------------------------------------------------------
+-- Nur die drei Kaempfe, die dem Spieler wirklich etwas kosten: Guardian
+-- (40, Loc 28), Castle Guard (45, Loc 36), Crypt Warden (46, Loc 58).
+--
+-- Bewusst NICHT der Tutorial-Wolf (44, Loc 3). Dort ist Nahrung kein
+-- Preise fuer einen Kampf, den man ohnehin nicht vermeiden kann - ein
+-- zufaelliges Stueck neben dem ersten Wolf wuerde den ersten Kampf
+-- wertlos machen. Ebenso nicht die Patrouillenwoelfe (41-43): sie laufen
+-- einem bei jedem Zug ueber den Weg, das ist der Grund fuer die Vorwarnung
+-- aus Plan 2, nicht fuer eine Belohnung.
+--
+-- Und nicht die Nebelwoelfe (100+): sie nehmen nur 2-4 Schaden und hauen
+-- 11-13 zurueck. Sie zu bekaempfen ist ohnehin aussichtslos, eine Belohnung
+-- dafuer waere eine Einladung, es zu versuchen.
+dropsFrom :: ObjectID -> Bool
+dropsFrom wid = wid `elem` [guardianWolfId, castleGuardId, cryptWardenId]
+
+-- 1 von 4. Niedrig ist Absicht: die Beute soll einen Kampf versuessnen, nicht
+-- zum Essen der letzte Grund werden, ihn ueberhaupt zu fuehren.
+dropRoll :: Int
+dropRoll = 3
+
+-- Liefert die neue Beute und den weitergereichten Spielzustand. Der Wurf
+-- muss ueber `rollIn` laufen, sonst waere die Beute nicht reproduzierbar
+-- (Plan 3) - und die Auswahl des Stuecks ueber einen zweiten Wurf, nicht
+-- ueber `cycle`, damit sie dieselbe Folge folgt.
+--
+-- Aufrufer: `fightLoop` im Sieger-Zweig, und zwar auf dem Zustand NACH dem
+-- Angriff. Auf dem Zustand davor waere die Zufallsfolge des Kampfes
+-- verschoben.
+wolfDrop :: Game -> ObjectID -> (ObjectList, Game)
+wolfDrop game wid
+    | not (dropsFrom wid) = ([], game)
+    | otherwise =
+        let (hit, g1) = rollIn 0 dropRoll game
+        in if hit /= 0 then ([], g1)
+           else let (which, g2) = rollIn 0 (length dropFoodTemplates - 1) g1
+                in ([placeAt (wolfLocOf wid (gameWolves g2)) (dropFoodTemplates !! which)], g2)
+  where
+    placeAt loc t = t { objPos = loc }
+
+-- Wo der Wolf stand. Zum Zeitpunkt des Aufrufs ist er ueber `wolfDead`
+-- bereits als tot markiert, `wolfLoc` gilt aber weiterhin. Ein Wolf, den es
+-- nicht gibt, legt die Beute auf Loc 0 - das Objekt bleibt dann immer noch
+-- auffindbar und essbar, nur eben im falschen Raum.
+wolfLocOf :: ObjectID -> [Wolf] -> Int
+wolfLocOf wid = maybe 0 wolfLoc . find ((== wid) . wolfId)
+
+-- ---------------------------------------------------------------------------
 -- (Punkt 2) `save` ohne Prinzessin im Raum
 -- ---------------------------------------------------------------------------
 -- Anwesenheit muss ausdruecklich geprueft werden. Der Status allein sagt

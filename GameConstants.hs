@@ -63,6 +63,27 @@ foodIds =
   , (21, 12)  -- Honeycomb        (Forest)
   , (28, 8)   -- Pale Fungus      (Catacombs)
   , (30, 14)  -- Sack of Grain    (Catacombs)
+  ] ++ wolfDropIds
+
+-- ---------------------------------------------------------------------------
+-- (Punkt 4) Nahrung, die ein getoeteter Wolf fallen laesst.
+--
+-- Eigene IDs ab 36 - 32-35 sind die Inschrift-Objekte aus Punkt 4, alles
+-- darunter ist vergeben. Eine bestehende Nahrungs-ID zu recyceln waere
+-- sichtbar falsch: die Beutestuecke landen in einem Raum, in dem auch die
+-- Welt-Nahrung liegen kann (28 liegt auf Loc 58, 30 auf Loc 60), und zwei
+-- Objekte mit demselben Namen machen eines davon unerreichbar -
+-- `getObjectInList` liefert bei Gleichstand den ersten Listeneintrag.
+--
+-- Die Vorlagen mit Namen und Texten stehen in `dropFoodTemplates`
+-- (GameData); die beiden Listen muessen dieselben IDs nennen, was
+-- Tests.hs prueft.
+-- ---------------------------------------------------------------------------
+wolfDropIds :: [(ObjectID, Life)]
+wolfDropIds =
+  [ (36, 10)  -- Wolf Haunch
+  , (37, 8)   -- Split Bone
+  , (38, 14)  -- Provision Tin
   ]
 
 -- ---------------------------------------------------------------------------

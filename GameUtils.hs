@@ -274,7 +274,11 @@ foodName i = case lookup i foodIds of
                Just _  -> objNameById i
                Nothing -> "food"
 
+-- (Punkt 4) Die Beute der Woelfe steht nicht in `objectList` - sie entsteht
+-- erst mit dem Tod des Wolfs. Ohne sie hier waere `foodName` fuer jedes
+-- Beutestueck auf "food" zurueckgefallen und der Ess-Satz haette
+-- "You eat the food." gesagt.
 objNameById :: ObjectID -> String
-objNameById i = case filter ((== i) . objId) objectList of
+objNameById i = case filter ((== i) . objId) (objectList ++ dropFoodTemplates) of
                   (o:_) -> objName o
                   []    -> "food"

@@ -259,16 +259,45 @@ initialInventory :: Inventory
 initialInventory = [ o | o <- objectList, objId o == 13 ]
 
 -- ---------------------------------------------------------------------------
--- Objekt-Texte. Bounds (0,35): JEDER Index muss belegt sein, weil
+-- (Punkt 4) Beute der Woelfe
+--
+-- Diese Objekte stehen absichtlich NICHT in `objectList`: es gibt sie erst,
+-- wenn ein Wolf stirbt, und dann liegen sie in dem Raum, in dem er stand.
+-- Als Vorlage fuer `wolfDrop` (GameActions) gehoeren sie trotzdem hier, weil
+-- Namen und Texte zum Weltinhalt gehoeren und nicht nebenbei im Code
+-- entstehen.
+--
+-- `objPos = -1` ist ein Platzhalter: `wolfDrop` setzt den Ort, an dem der
+-- Wolf stand, bevor das Objekt in `gameObjects` landet.
+--
+-- Die IDs muessen mit `wolfDropIds` (GameConstants) uebereinstimmen, sonst
+-- sind die Stuecke nicht essbar. Tests.hs prueft das in beide Richtungen.
+-- ---------------------------------------------------------------------------
+dropFoodTemplates :: [Object]
+dropFoodTemplates =
+  [ Object { objPos = -1, objId = 36, objName = "Wolf Haunch"
+           , objDescription = "A haunch of meat, left where the wolf fell"
+           , objActions = ["examine", "take", "pick"] }
+  , Object { objPos = -1, objId = 37, objName = "Split Bone"
+           , objDescription = "A marrow bone, split clean"
+           , objActions = ["examine", "take", "pick"] }
+  , Object { objPos = -1, objId = 38, objName = "Provision Tin"
+           , objDescription = "A sealed tin from a household store"
+           , objActions = ["examine", "take", "pick"] }
+  ]
+
+-- ---------------------------------------------------------------------------
+-- Objekt-Texte. Bounds (0,38): JEDER Index muss belegt sein, weil
 -- `objectTextFor` sonst ein undefiniertes Array-Element trifft.
 --
 -- Punkt 4 hat die Obergrenze von 31 auf 35 angehoben (IDs 32-35 sind die
--- Inschrift-Objekte). Die Tests lesen die Grenze jetzt aus `bounds` und
--- nicht mehr aus einer fest verdrahteten 31 - sonst waere der naechste
--- Content-Eintrag wieder ein stiller Bruch.
+-- Inschrift-Objekte), Punkt 4b (Wolf-Beute) auf 38 (IDs 36-38). Die Tests
+-- lesen die Grenze jetzt aus `bounds` und nicht mehr aus einer fest
+-- verdrahteten 31 - sonst waere der naechste Content-Eintrag wieder ein
+-- stiller Bruch.
 -- ---------------------------------------------------------------------------
 objectText :: Array ObjectID String
-objectText = array (0,35) [
+objectText = array (0,38) [
        (0,"           .-.---------------------------------------.-.  "
         ++ "\n          ((o))                                         ) "
         ++ "\n           \\U/_________          _______         ______/  "
@@ -354,8 +383,14 @@ objectText = array (0,35) [
        (32,"The beam above your own front door. The letters are worn soft by weather, but they were cut deep.\n'Four that wake, one that comes.'"),
        (33,"A flat stone in the riverbed with the same words 'Four that wake, one that comes.' on its upper face.\nThe current has been over it a long time. The water has not worn them out. That is the part that bothers you."),
        (34,"Someone stacked these stones, and carved the bottom one. The stack is too careful to be accidental.\nThe numbers 4 and 1 are carved into that one stone.\nFrom up here you can see the forest, the castle, and the canyon. The four shrines are not visible from this side."),
-       (35,"The seal on the vault door is carved, not written.\nLetters on the Door's frame say 'Four that wake, one that comes.'")
-       ]
+        (35,"The seal on the vault door is carved, not written.\nLetters on the Door's frame say 'Four that wake, one that comes.'"),
+
+        -- (Punkt 4) Beute der Woelfe. Sie liegt im Raum des Wolfs, nicht in
+        -- `objectList` - siehe `dropFoodTemplates`.
+        (36,"A haunch of meat, gnawed at one end and left at the other. Whatever it was carrying, it got most of the way with it."),
+        (37,"A marrow bone, split clean down the middle. The crack is not a bite mark."),
+        (38,"A sealed tin from a household store. The date on the lid is stamped, and the seal is still unbroken.")
+        ]
 
 -- ---------------------------------------------------------------------------
 -- Ortsbeschreibungen. Bounds (0,60) - Index 5 MUSS bestehen bleiben,

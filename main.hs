@@ -266,10 +266,16 @@ fightLoop game@Game{gameLocation = location, gameCharacter = character} object e
                     then do
                         putStrLn "You Won! Press 'Enter' to continue"
                         _ <- readLine
-                        let updatedObjList = attackObj object (gameObjects g1)
+                        -- (Punkt 4) Der Wolf kann etwas fallen lassen. Der
+                        -- Wurf laeuft auf `g1`, dem Zustand NACH dem Angriff -
+                        -- auf `game` waere die Zufallsfolge des Kampfes
+                        -- verschoben und Plan 3 waere hin (Plan-3-Disziplin:
+                        -- jeder Wurf nimmt `gameStdGen` mit, in Reihenfolge).
+                        let (dropped, g2) = wolfDrop g1 (objId object)
+                            updatedObjList = attackObj object (gameObjects g2)
                             killWolf w = if wolfId w == objId object then w { wolfDead = True } else w
-                        return g1 { gameObjects = updatedObjList
-                                  , gameWolves = map killWolf (gameWolves g1) }
+                        return g2 { gameObjects = dropped ++ updatedObjList
+                                  , gameWolves = map killWolf (gameWolves g2) }
                     else do
                         -- (Plan 3) Der Rueckschlag wird erst nach dem
                         -- Spielerangriff gewuerfelt. Damit bleibt die
