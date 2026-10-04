@@ -153,6 +153,31 @@ persistWolfHp :: Game -> ObjectID -> Life -> Game
 persistWolfHp game wid hp = game { gameWolves = setWolfHp wid hp (gameWolves game) }
 
 -- ---------------------------------------------------------------------------
+-- (Punkt 3) Flucht ist ein Wurf, kein Kalten Druecken
+-- ---------------------------------------------------------------------------
+-- `flee` war bedingungslos erfolgreich. Damit liess sich jeder Kampf abbrechen
+-- - auch der Guardian (30 LP, Atk 8) und der Crypt Warden (24 LP, Atk 10),
+-- die einzigen Kämpfe, die wirklich etwas kosten.
+--
+-- HARTE AUSNAHME IM NEBEL: `fogActive game` heisst, die Nebelwoelfe sind da
+-- (30 LP, Atk 16, Def 4 - `getWolfStats`). Der Held richtet 2-4 Schaden an,
+-- sie hauen 11-13 zurueck. Ein Fehlschlag waere dort ein Tod ohne
+-- Gegenmoeglichkeit, und genau die Phase, in der der Todesmarsch laeuft,
+-- waere unabspielbar. Also wird im Nebel gar nicht erst geworfen - das
+-- kostet keinen Wurf, die Zufallsfolge bleibt zwischen den Phasen
+-- vergleichbar.
+--
+-- Der Wurf laeuft ueber `rollIn`, damit die Reproduzierbarkeit aus Plan 3
+-- erhalten bleibt: gleicher Seed + gleiche Befehle = gleiche Flucht.
+fleeChance :: Int
+fleeChance = 1   -- 1 von 2
+
+fleeSucceeds :: Game -> (Bool, Game)
+fleeSucceeds game
+    | fogActive game = (True, game)
+    | otherwise      = let (r, g) = rollIn 0 fleeChance game in (r == fleeChance, g)
+
+-- ---------------------------------------------------------------------------
 -- (Punkt 2) `save` ohne Prinzessin im Raum
 -- ---------------------------------------------------------------------------
 -- Anwesenheit muss ausdruecklich geprueft werden. Der Status allein sagt

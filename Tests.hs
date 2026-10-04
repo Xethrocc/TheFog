@@ -345,6 +345,42 @@ main = do
       (length (filter (\g -> princessInRoom g)
                       [at (locById i) | i <- map locId gameMap]) == 1)
 
+  section "Punkt 3: Flucht ist ein Wurf"
+  -- `flee` war bedingungslos erfolgreich: jeder Kampf abbrechbar, auch der
+  -- Guardian (30 LP) und der Crypt Warden (24 LP).
+  let seeds = [1 .. 200]
+      fleeNonFog = map (\s -> fst (fleeSucceeds (gameWithSeed s mkGame))) seeds
+      fogGame s = gameWithSeed s mkGame { gameShrineFlags = allFlags }
+      fleeFog    = [ fst (fleeSucceeds (fogGame s)) | s <- seeds ]
+      noRoll     = [ gameStdGen (fogGame s) == gameStdGen (snd (fleeSucceeds (fogGame s)))
+                   | s <- seeds ]
+  ok "Flucht gelingt manchmal"       (elem True fleeNonFog)
+  ok "Flucht misslingt manchmal"     (elem False fleeNonFog)
+  -- Kein Flake-Test: Binomial(200, 0.5) hat sd ~7.1, das Band ist weit.
+  ok "Verhaeltnis etwa 1 : 1"        (length (filter id fleeNonFog) > 60
+                                        && length (filter id fleeNonFog) < 140)
+  -- HART: im Nebel gelingt sie immer. Die Nebelwoelfe hauen 11-13 zurueck
+  -- und nehmen nur 2-4 - ein Fehlschlag waere ein Tod ohne Gegenmoeglichkeit.
+  ok "im Nebel immer erfolgreich"    (all id fleeFog)
+  ok "im Nebel wird gar nicht geworfen" (and noRoll)
+  ok "im Nebel: gleicher Generator"  (and noRoll)
+  -- Reproduzierbar (Plan 3): gleicher Seed, gleiche Entscheidung.
+  ok "gleicher Seed -> gleiche Flucht"
+      (all (\s -> fst (fleeSucceeds (gameWithSeed s mkGame))
+                == fst (fleeSucceeds (gameWithSeed s mkGame))) seeds)
+  -- Der Wurf wandert mit: zwei Fluchten aus demselben Spielstand sind
+  -- unabhaengig, nicht identisch (sonst waere die zweite ein Relikt).
+  let twoFrom g = let (a, g1) = fleeSucceeds g
+                      (b, _)   = fleeSucceeds g1
+                  in (a, b)
+      pairs = map (\s -> twoFrom (gameWithSeed s mkGame)) seeds
+  ok "zwei Fluchten sind unabhaengig" (length (nub pairs) > 1)
+  ok "beide Ergebnisse kommen vor"    (length (nub pairs) == 4)
+  -- Plan 1 bleibt auch im Fehlschlag-Fall gelten: `fightLoop` schreibt
+  -- `enemyHP` in beiden Zweigen ueber `persistWolfHp` zurueck.
+  let fled = persistWolfHp (snd (fleeSucceeds mkGame)) 41 5
+  ok "HP bleiben auch nach Flucht"    (wHp 41 (gameWolves fled) == Just 5)
+
 objById :: Int -> Object
 objById i = case filter ((== i) . objId) objectList of
               (o:_) -> o

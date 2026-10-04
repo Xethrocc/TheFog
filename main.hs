@@ -181,6 +181,14 @@ handleFight game obj = do
 --
 -- (Plan 3) Alle Wuerfe laufen ueber `rollIn`, der Generator wandert als
 --      Zustand mit. Ein Kampf ist damit vollstaendig reproduzierbar.
+--
+-- (Punkt 3) `flee` ist ein Wurf (1/2) und im Nebel gar keiner
+--      (`fleeSucceeds`, GameActions). Ein Fehlschlag kostet einen Angriff
+--      des Wolfs und fuehrt zurueck in `fightLoop` - NICHT zurueck auf die
+--      Karte. Vorher endete der Zweig per `return`, eine misslungene Flucht
+--      waere also genau so ein Ende des Kampfes gewesen wie eine gelungene,
+--      nur ohne den Ertrag: `flee` haette den Kampf beendet, ohne dass man
+--      ihn gewonnen haette.
 fightLoop :: Game -> Object -> Life -> Life -> IO Game
 fightLoop game@Game{gameLocation = location, gameCharacter = character} object enemyHP enemyMaxHP = do
     putStrLn ("________________________________________________________________________________")
@@ -213,11 +221,41 @@ fightLoop game@Game{gameLocation = location, gameCharacter = character} object e
         then return (persistWolfHp game (objId object) enemyHP)
         else if verb `elem` quitFight
         then do
-            putStrLn "You fled from the fight!\n"
-            -- (A4) Flucht kostet einen Zug, ist aber nie blockiert -
-            -- der Anti-Softlock gegen mehrere Wölfe im Raum.
-            -- (Plan 1) Der Wolf bleibt angeschlagen.
-            return (advanceTurn (persistWolfHp game (objId object) enemyHP))
+            -- (Punkt 3) Der Wurf entscheidet, nicht das Tastenbrett.
+            let (escaped, g0) = fleeSucceeds game
+            if escaped
+                then do
+                    putStrLn "You fled from the fight!\n"
+                    -- (A4) Flucht kostet einen Zug, ist aber nie blockiert -
+                    -- der Anti-Softlock gegen mehrere Wölfe im Raum.
+                    -- (Plan 1) Der Wolf bleibt angeschlagen.
+                    return (advanceTurn (persistWolfHp g0 (objId object) enemyHP))
+                else do
+                    -- Fehlgeschlagen: der Wolf ist einen Angriff lang
+                    -- unbehindert. Ohne diesen Gratisangriff waere `flee` nur
+                    -- eine Umbenennung von "zögern" - man koennte jeden Kampf
+                    -- abbrechen, indem man es oft genug versucht.
+                    let (wAtk, _) = wolfCombatStats (gameWolves g0) (objId object)
+                        (wBonus, g1) = rollIn 0 2 g0
+                        char2  = gameCharacter g1
+                        wolfDmg = damage (wAtk + wBonus) (getDef char2)
+                        newHP  = getHP char2 - wolfDmg
+                        counter = if wolfDmg == 0
+                                    then "The " ++ getObjStr object ++ " strikes, and the shield holds."
+                                    else "The " ++ getObjStr object ++ " hits back for " ++ show wolfDmg ++ "!"
+                    putStrLn ("You try to run, but " ++ map toLower (getObjStr object)
+                               ++ " is faster. " ++ counter ++ "\n")
+                    -- (Plan 1) Auch der verpatzte Versuch kostet den Wolf
+                    -- seinen angerichteten Schaden nicht.
+                    let fought = (persistWolfHp g1 (objId object) enemyHP)
+                                 { gameCharacter = char2 { charLife = newHP } }
+                    if newHP <= 0
+                        then return fought { gameCharacter = char2 { charLife = 0 } }
+                        else do
+                            let after = advanceTurn fought
+                            if getHP (gameCharacter after) <= 0
+                                then return after
+                                else fightLoop after object enemyHP enemyMaxHP
         else if verb `elem` ["attack", "hit"]
             then do
                 let (pBonus, g1) = rollIn 0 2 game
