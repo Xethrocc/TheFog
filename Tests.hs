@@ -121,7 +121,7 @@ main = do
   ok "keine Exits -> 'no way out'"     (describeExits (Location 999 "Nowhere" []) == "no way out")
   ok "'no way out' im generischen Text"(locD True (Location 999 "Nowhere" []) == "Dense, oppressive fog. You can make out no way out at all.")
   ok "Loc 0 Home eigener Text"        ("recognise your home" `isInfixOf` locD True (locById 0))
-  ok "Loc 54 Kampf-Banner"            (locD True (locById 54) == ">>You are in a Fight!<<")
+  ok "Loc 54 Kampf-Banner"            (locD True fightLocation == ">>You are in a Fight!<<")
   ok "Loc 34 Schloss eigener Text"    (locD True (locById 34) /= locD True (locById 20))
   ok "SE wird NICHT gelistet (17)"    (not ("South-East" `isInfixOf` locD True (locById 17)))
   ok "SE wird NICHT gelistet (33)"    (not ("South-East" `isInfixOf` locD True (locById 33)))
@@ -260,7 +260,10 @@ main = do
 
   section "Datenintegritaet"
   ok "jede Location per locById"      (all (\l -> locName (locById (locId l)) == locName l) gameMap)
-  ok "gameMap = 0..60 ohne Loc 5"     (sort (map locId gameMap) == [0,1,2,3,4] ++ [6..60])
+  -- Gelesen als "alle IDs aus 0..60 ausser den entfernten", nicht als
+  -- fest verdrahtete Liste: Loc 5 und Loc 54 sind raus (Punkt 1).
+  ok "gameMap = 0..60 ohne Loc 5, 54"
+      (sort (map locId gameMap) == filter (`notElem` [5, 54]) [0 .. 60])
   ok "Loc 5 wirklich entfernt"        (null (filter ((== 5) . locId) gameMap))
   ok "descr[5] existiert trotzdem"    (inRange (bounds descr) 5 && length (descr ! 5) > 0)
   ok "jedes Objekt hat objectText"    (all (\o -> inRange (bounds objectText) (objId o) && length (objectTextFor o) > 0) objectList)
@@ -293,6 +296,26 @@ main = do
   ok "kein 'help' mehr bei der Prinzessin" (not ("help" `elem` objActions (objById 11)))
   ok "'burn' kein No-op mehr"         (not (any (\o -> "burn" `elem` objActions o) objectList))
 
+  section "Punkt 1: Wolf-Fight (Loc 54) entfernt"
+  -- Der Eintrag behauptete einen Ort, den es nicht gab: kein Exit fuehrte
+  -- nach 54, die Location selbst hatte keine Exits. `fightLoop` braucht
+  -- trotzdem eine echte Location fuer ASCII-Kunst und Banner.
+  ok "Loc 54 nicht mehr in gameMap"   (null (filter ((== 54) . locId) gameMap))
+  ok "locById 54 -> Nowhere"          (locName (locById 54) == "Nowhere")
+  ok "fightLocation != gameMap"       (locName fightLocation /= locName (locById 54))
+  -- `locA = locId`: nur die ID 54 selektiert `ascii 54` (das Kampfbild).
+  -- Aendern der ID waere kein Refactor, sondern eine stumme Regression.
+  ok "fightLocation traegt die ID 54"  (locId fightLocation == 54 && locA fightLocation == 54)
+  ok "fightLocation hat keine Exits"   (null (locExits fightLocation))
+  -- Das Banner kommt aus `descr`/`fogDescr` - beide Eintraege muessen
+  -- bleiben, sonst zeigte der Kampf im Nebel den generischen Text.
+  ok "descr[54] existiert trotzdem"    (inRange (bounds descr) 54 && length (descr ! 54) > 0)
+  ok "descr[54] ist das Kampf-Banner"  (descr ! 54 == ">>You are in a Fight!<<")
+  ok "ohne Nebel: Kampf-Banner"       (locD False fightLocation == ">>You are in a Fight!<<")
+  ok "fogDescr kennt weiter 54"        (lookup 54 fogDescr == Just ">>You are in a Fight!<<")
+  -- `descr` bleibt dicht: 0..60 ohne Luecken, sonst bricht das Array.
+  ok "descr weiterhin dicht 0..60"    (length [i | i <- [0 .. 60], inRange (bounds descr) i, hasDescr i] == 61)
+
 objById :: Int -> Object
 objById i = case filter ((== i) . objId) objectList of
               (o:_) -> o
@@ -300,6 +323,9 @@ objById i = case filter ((== i) . objId) objectList of
 
 hasDef :: Int -> Bool
 hasDef i = i `elem` [ fst e | e <- assocs objectText ]
+
+hasDescr :: Int -> Bool
+hasDescr i = i `elem` [ fst e | e <- assocs descr ]
 
 -- Gegenrichtung: von `to` muss ein Exit zurueck nach `from` existieren.
 symmetric :: Location -> Bool

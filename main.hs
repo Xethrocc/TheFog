@@ -145,14 +145,15 @@ handleTake game obj = do
 
 -- (Fix 10) Gegner-HP aus den echten Wolf-Daten, inkl. Max-HP fuer die
 -- Balken. Vorher war `enemyHP` fest auf 12 und der Balken fest auf 30.
+--
+-- (Punkt 1) Die Kampf-Location kommt aus `fightLocation` (GameData) statt
+-- hier inline gebaut zu werden. Sie ist kein Ort der Welt: der Eintrag
+-- "Wolf-Fight" ist aus `gameMap` entfernt, weil ihn kein Exit erreichte.
 handleFight :: Game -> Object -> IO Game
 handleFight game obj = do
     let homeLoc = gameLocation game
         (enemyHP, enemyMaxHP) = wolfFullStats (gameWolves game) (objId obj)
-        fightGame = game { gameLocation = Location { locId = 54
-                                                   , locName = "Wolf-Fight"
-                                                   , locExits = [] } }
-    result <- fightLoop fightGame obj enemyHP enemyMaxHP
+    result <- fightLoop (game { gameLocation = fightLocation }) obj enemyHP enemyMaxHP
     return result { gameLocation = homeLoc }
 
 -- (Plan 3) Alle Wuerfe laufen ueber `rollIn` (GameActions). Das Spiel

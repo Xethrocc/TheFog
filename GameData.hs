@@ -11,6 +11,11 @@ import GameTypes
 -- nirgends referenziert wurde. Die `descr`-Definition bei Index 5 MUSS
 -- trotzdem bestehen bleiben, sonst laeuft das Erzeugen des Arrays auf.
 --
+-- (Punkt 1) Dasselbe gilt fuer "Wolf-Fight" (locId 54): der Eintrag ist
+-- entfernt, weil ihn kein Exit erreichte - er war ein Bildschirm, kein Ort.
+-- `descr 54` und `fogDescr 54` MUESSEN bestehen bleiben, weil der Kampf
+-- weiterhin darüber laeuft, siehe `fightLocation`.
+--
 -- WICHTIG: `gameMap` wird ueber `locById` (GameUtils) nach `locId` gesucht,
 -- NICHT positionell. Sonst wuerde das Entfernen eines Eintrags die
 -- Location-IDs aller nachfolgenden Raeume verschieben.
@@ -73,7 +78,6 @@ gameMap =
  , Location {locId = 51, locName = "Flying Stones", locExits = [(50,N),(52,S)]}
  , Location {locId = 52, locName = "Air Shrine", locExits = [(49,N)]}
  , Location {locId = 53, locName = "Start Menue", locExits = [(0,SE)]}
- , Location {locId = 54, locName = "Wolf-Fight", locExits = []}
  -- Die Katakomben unter dem "Dark Room"
  , Location {locId = 55, locName = "Lower Stair", locExits = [(30,N),(56,O)]}
  , Location {locId = 56, locName = "Ossuary", locExits = [(55,O),(57,S)]}
@@ -82,6 +86,22 @@ gameMap =
  , Location {locId = 59, locName = "Offering Chamber", locExits = [(58,W),(60,S)]}
  , Location {locId = 60, locName = "Sealed Vault", locExits = [(59,N)]}
  ]
+
+-- (Punkt 1) "Wolf-Fight" ist KEIN Ort der Welt: kein Exit fuehrte hin, die
+-- Location hatte keine Exits, und `descr 54` behauptete, es gebe diesen Raum.
+-- Der Eintrag ist deshalb aus `gameMap` entfernt.
+--
+-- Der Kampf braucht aber trotzdem eine echte `Location`, weil `fightLoop`
+-- drei Dinge daraus liest: `locA` fuer die ASCII-Kunst (Ascii.ascii 54), den
+-- Namen fuer die Kopfzeile und `locD` fuer das Banner aus `descr` bzw.
+-- `fogDescr`. Deshalb wird sie hier als Wert gebaut statt aus der Karte
+-- gelesen - mit derselben ID 54, an der Kunst und Banner haengen.
+--
+-- Ein Wechsel der ID waere kein Refactor, sondern eine Regression: die
+-- Kunst und die Banner-Texte blieben stumm bzw. zeigten den generischen
+-- Nebeltext "no way out" mitten im Kampf.
+fightLocation :: Location
+fightLocation = Location { locId = 54, locName = "Wolf-Fight", locExits = [] }
 
 -- ---------------------------------------------------------------------------
 -- Woelfe
@@ -339,7 +359,8 @@ objectText = array (0,35) [
 
 -- ---------------------------------------------------------------------------
 -- Ortsbeschreibungen. Bounds (0,60) - Index 5 MUSS bestehen bleiben,
--- obwohl es keine Location mehr gibt (siehe gameMap).
+-- obwohl es keine Location mehr gibt (siehe gameMap). Dasselbe gilt fuer
+-- Index 54: es ist der Bildschirm des Kampfes (siehe `fightLocation`).
 -- ---------------------------------------------------------------------------
 descr :: Array Int String
 descr = array (0,60) [
@@ -422,8 +443,9 @@ descr = array (0,60) [
 -- (0..60) und damit unkritisch, `fogDescr` ist es nicht.
 --
 -- Loc 54 braucht zwingend einen Eintrag: `fightLoop` zeigt `locD` der
--- virtuellen Kampf-Location. Ohne ihn stuende im Nebel "no way out" da,
--- statt dem Kampf-Banner.
+-- Kampf-Location. Ohne ihn stuende im Nebel "no way out" da, statt dem
+-- Kampf-Banner. Das gilt auch, seit Loc 54 aus `gameMap` entfernt wurde -
+-- der Kampf laeuft ueber `fightLocation`, nicht ueber `locById`.
 -- ---------------------------------------------------------------------------
 fogDescr :: [(Int, String)]
 fogDescr =
