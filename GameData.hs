@@ -3,6 +3,10 @@ module GameData where
 import Data.Array
 import Data.List (intercalate)
 import GameTypes
+-- (Punkt 6) Nur fuer `cryptWallId`. GameConstants haengt an GameTypes und
+-- GameData haengt jetzt an GameConstants - die Richtung bleibt damit
+-- azyklisch, und eine Objekt-ID steht genau einmal im Repo.
+import GameConstants
 
 -- ---------------------------------------------------------------------------
 -- Locations
@@ -287,17 +291,40 @@ dropFoodTemplates =
   ]
 
 -- ---------------------------------------------------------------------------
--- Objekt-Texte. Bounds (0,38): JEDER Index muss belegt sein, weil
+-- (Punkt 6) Die Wand im versiegelten Verlies
+--
+-- Sie steht NICHT in `objectList`: sie entsteht erst mit dem Nebel
+-- (`spawnCryptWall`, GameActions), und vorher gibt es sie nicht. Sie wird
+-- deshalb auch nicht in der Lage-Liste des Startzustands gezeigt.
+--
+-- Nicht mitnehmbar, genau wie die vier Inschrift-Objekte aus Punkt 4: sie
+-- gehoert zum Ort. Und nur `read` und `examine` - beides beendet das Spiel,
+-- siehe `performAction` in main.hs.
+--
+-- Der Text ist der VOLE, ungeschnittene Wortlaut der Prophezeiung. Die
+-- zwoelf Inschriften an den Umkehrpunkten sagen "Four that wake, one that
+-- comes"; die Wand sagt, dass der eine den Nebel ruft - und dass er der
+-- Leser ist. Wer nur einen der beiden Verben abschirmt, gibt die ganze
+-- Prophezeiung umsonst preis.
+-- ---------------------------------------------------------------------------
+cryptWall :: Object
+cryptWall = Object { objPos = 60, objId = cryptWallId
+                   , objName = "Carved Wall"
+                   , objDescription = "The far wall of the vault, cut over with one long text"
+                   , objActions = ["read", "examine"] }
+
+-- ---------------------------------------------------------------------------
+-- Objekt-Texte. Bounds (0,39): JEDER Index muss belegt sein, weil
 -- `objectTextFor` sonst ein undefiniertes Array-Element trifft.
 --
 -- Punkt 4 hat die Obergrenze von 31 auf 35 angehoben (IDs 32-35 sind die
--- Inschrift-Objekte), Punkt 4b (Wolf-Beute) auf 38 (IDs 36-38). Die Tests
--- lesen die Grenze jetzt aus `bounds` und nicht mehr aus einer fest
--- verdrahteten 31 - sonst waere der naechste Content-Eintrag wieder ein
--- stiller Bruch.
+-- Inschrift-Objekte), Punkt 4b (Wolf-Beute) auf 38 (36-38), Punkt 6 (die
+-- Wand) auf 39. Die Tests lesen die Grenze jetzt aus `bounds` und nicht
+-- mehr aus einer fest verdrahteten 31 - sonst waere der naechste
+-- Content-Eintrag wieder ein stiller Bruch.
 -- ---------------------------------------------------------------------------
 objectText :: Array ObjectID String
-objectText = array (0,38) [
+objectText = array (0,39) [
        (0,"           .-.---------------------------------------.-.  "
         ++ "\n          ((o))                                         ) "
         ++ "\n           \\U/_________          _______         ______/  "
@@ -389,7 +416,10 @@ objectText = array (0,38) [
         -- `objectList` - siehe `dropFoodTemplates`.
         (36,"A haunch of meat, gnawed at one end and left at the other. Whatever it was carrying, it got most of the way with it."),
         (37,"A marrow bone, split clean down the middle. The crack is not a bite mark."),
-        (38,"A sealed tin from a household store. The date on the lid is stamped, and the seal is still unbroken.")
+        (38,"A sealed tin from a household store. The date on the lid is stamped, and the seal is still unbroken."),
+
+        -- (Punkt 6) Der volle Wortlaut. Siehe `cryptWall`.
+        (39,"The whole of the far wall is cut over, in one hand, and the letters run down to the floor.\n\n'Four that wake, one that comes.\n\nThe four are the shrines of the four elements. They will be woken, in the order they were built, by a person who went looking for a way to wake them.\n\nThe one is not a hero. The one is a person. The one is whoever stands here and reads this, and by now they have been called.\n\nThe fog does not come. It is called. It is called by the person who woke the four, because that person took the crystal in the hand knowing that it could open the shrines, and not knowing that opening them is what the fog was waiting for.\n\nA hero who wields the sword will turn the fog back. It is written here so that the one who is called will go and find him. There is no hero in this land. There is a sword in a dark room, and it lights up for whoever lifts it, and afterwards it does nothing at all.'\n\nThe cutting stops there.")
         ]
 
 -- ---------------------------------------------------------------------------

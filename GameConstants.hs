@@ -49,6 +49,11 @@ princessId = 11
 helpId    :: ObjectID
 helpId    = 13
 
+-- (Punkt 6) Die Wand im versiegelten Verlies. 39 ist die naechste freie ID
+-- nach der Wolf-Beute (36-38).
+cryptWallId :: ObjectID
+cryptWallId = 39
+
 -- ---------------------------------------------------------------------------
 -- Essen (A1/A2/C1): nur Objekte mit einer ID aus dieser Liste sind essbar.
 -- Jedes Essen wird beim Verzehr aus dem Inventar entfernt - im Raum liegen

@@ -308,8 +308,18 @@ fightLoop game@Game{gameLocation = location, gameCharacter = character} object e
 -- (Fix 9/22) Tod-Check zentral im gameLoop: gilt fuer Kampf- und Biss-Tod.
 -- (B6) Der Nebel-Tod hat einen eigenen Screen, weil inhaltlich etwas
 -- anderes passiert. Der Basis-Tod bleibt unveraendert.
+--
+-- (Punkt 6) Dritter Zweig: der Tod an der Wand. Er ist sofort und haengt
+-- nicht an den LP, deshalb ein eigenes Flag auf `Game` statt eines
+-- HP-Nullwerts - mit `charLife = 0` waere er nicht von einem Biss zu
+-- unterscheiden, und der Nebel-Tod wuerde sich die Diagnose teilen.
+--
+-- Die Reihenfolge ist Absicht: `gameWallRead` wird VOR `getHP` geprueft.
+-- Ein Leser mit 30 LP muss genauso sterben wie einer mit 1 - sonst
+-- waere das Ende aushebelbar, indem man die Wand mit genug LP liest.
 gameLoop :: Game -> IO ()
 gameLoop game
+    | gameWallRead game = cryptWallDeath (getSteps (gameCharacter game))
     | getHP (gameCharacter game) <= 0 =
         if fogActive game
             then fogDeath (getSteps (gameCharacter game))
@@ -324,6 +334,17 @@ fogDeath steps = do
     putStrLn "The fog closes over you. It does not lift."
     putStrLn "You cannot tell which way the shrines are any more, or whether you ever reached them."
     putStrLn ("You took " ++ show steps ++ " steps into the fog. Nobody else counted them.")
+    putStrLn "Game Over."
+
+-- (Punkt 6) Ende an der Wand. Gleiches Mass wie `fogDeath`: drei Zeilen,
+-- keine Aufloesung, kein Rueckweg, kein "du haettest". Die Prophezeiung
+-- nennt den Leser als den einen - das Ende bestaetigt das nicht und
+-- widerlegt es nicht, es stellt es nur fest.
+cryptWallDeath :: Steps -> IO ()
+cryptWallDeath steps = do
+    putStrLn "The cutting goes right through the stone, and there is nothing else on the wall."
+    putStrLn "The vault has one way out, and it leads back out into the fog."
+    putStrLn ("You took " ++ show steps ++ " steps to read this. Nobody else counted them.")
     putStrLn "Game Over."
 
 -- (Fix 1/3/4) Das Spiel-Herzstueck: zeigt die Location an, liest die Eingabe
@@ -448,11 +469,17 @@ performAction game actionStr obj
     | not (isObjHere obj (gameLocation game))
     , not (any ((== objId obj) . objId) (gameInventory game)) = cantDo
     | otherwise = case actionStr of
-        "read" -> readObj obj >> pause >> gameLoop game
-        "examine" ->
-            if objId obj == swordId
-                then interactSword obj >> pause >> gameLoop game
-                else examineObj obj >> pause >> gameLoop game
+        -- (Punkt 6) BEIDE Verben beenden das Spiel. `readObj` und
+        -- `examineObj` (GameActions) sind bytegleich - beide geben nur
+        -- `objectTextFor` aus. Eine Ausnahme nur fuer `examine` wuerde
+        -- erlauben, die halbe Prophezeiung umsonst zu lesen, deshalb
+        -- laeuft der Zweig VOR den generischen Faellen und fasst beide.
+        "read" | isCryptWall -> readWall
+               | otherwise  -> readObj obj >> pause >> gameLoop game
+        "examine"
+            | isCryptWall                -> readWall
+            | objId obj == swordId       -> interactSword obj >> pause >> gameLoop game
+            | otherwise                  -> examineObj obj >> pause >> gameLoop game
         "save" -> saveAction
         "take" -> handleTake game obj >>= gameLoop
         "pick" -> handleTake game obj >>= gameLoop   -- Alias, siehe objActions
@@ -473,6 +500,16 @@ performAction game actionStr obj
     nobodyToSave = actionStr == "save"
                 && gamePrincess game == PrincessAlive
                 && not (princessInRoom game)
+
+    isCryptWall = objId obj == cryptWallId
+
+    -- (Punkt 6) Text, dann der Game-Over-Screen aus `gameLoop`. Der Weg
+    -- laeuft ueber das Flag statt ueber einen direkten `cryptWallDeath`-
+    -- Aufruf hier: `gameLoop` ist die einzige Stelle, an der das Spiel
+    -- endet, und ein zweiter Endpunkt waere eine Stelle, die man beim
+    -- Lesen des Codes leicht uebersieht.
+    readWall = putStrLn (objectTextFor cryptWall) >> pause
+            >> gameLoop game { gameWallRead = True }
 
     doHelp = case getObjectInList "help" (gameObjects game ++ gameInventory game) of
         Just h  -> readObj h >> pause >> gameLoop game
@@ -544,7 +581,11 @@ fogEnding game = do
     putStrLn ""
     putStrLn "From here on, time is not free. Every step you take and every round you fight, the fog takes a little more of you."
     pause
-    return game { gameWolves = spawnPostFogWolves (gameWolves game) (gameShrineFlags game) }
+    -- (Punkt 6) Die Wand im versiegelten Verlies entsteht mit dem Nebel -
+    -- vorher gibt es sie nicht, und sie ist der einzige Weg aus diesem
+    -- Handel heraus, der nicht am Nebel-Todesmarsch endet. `spawnCryptWall`
+    -- kann mehrfach laufen und legt sie deshalb genau einmal an.
+    return $ spawnCryptWall game { gameWolves = spawnPostFogWolves (gameWolves game) (gameShrineFlags game) }
 
 game :: IO ()
 game = do
@@ -561,5 +602,7 @@ game = do
                   , gamePrincess = initialPrincessStatus
                   -- (Plan 3) Startseed fuer diese Partie. Fuer Tests und
                   -- Checkpoints stattdessen `gameWithSeed`.
-                  , gameStdGen = gen }
+                  , gameStdGen = gen
+                  -- (Punkt 6) Die Wand wird erst mit dem Nebel gelesen.
+                  , gameWallRead = False }
     return ()

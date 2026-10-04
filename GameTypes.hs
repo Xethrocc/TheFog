@@ -86,5 +86,13 @@ data Game = Game {
     -- `deriving Show` funktioniert, weil random >= 1.3 wieder einen
     -- Show-Instanz fuer StdGen mitbringt. Mit random 1.2 muesste man
     -- `instance Show Game` von Hand schreiben.
-    gameStdGen      :: StdGen
+    gameStdGen      :: StdGen,
+    -- (Punkt 6) Zustand, nicht Ursache: "die Wand wurde gelesen". Der Tod
+    -- an der Wand haengt nicht an den LP, sondern an diesem Flag - er muss
+    -- auch jemanden ereilen, der noch 30 LP hat. Deshalb steht die Abfrage
+    -- in `gameLoop` VOR dem `getHP`-Test und nicht in einem Handler, der
+    -- sich selbst beenden kann.
+    --
+    -- Bewusst kein `Maybe Steps` o.ae.: es gibt nur den einen Fall.
+    gameWallRead    :: Bool
 } deriving (Eq, Show)

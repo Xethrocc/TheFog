@@ -37,7 +37,10 @@ mkGameWithSeed seed = Game { gameLocation = locById 2
                            , gameWolves = initialWolves
                            , gameShrineFlags = initialShrineFlags
                            , gamePrincess = initialPrincessStatus
-                           , gameStdGen = mkStdGen seed }
+                           , gameStdGen = mkStdGen seed
+                           -- (Punkt 6) Spiegel von main.hs: die Wand ist
+                           -- ungeleseen, das Spiel laeuft.
+                           , gameWallRead = False }
 
 -- n Wuerfe ausfuehren und zurueckgeben: der Test prueft die WUERTE, nicht
 -- den Generator.
@@ -441,6 +444,104 @@ main = do
       (length (filter (\o -> objId o `elem` dropIds') after) == length ds)
   ok "Leiche liegt auch dort"        (any (\o -> objPos o == 28 && isPrefixOf' "dead" (objName o)) after)
 
+  section "Punkt 6: Die Wand im Verlies"
+  let walls o = filter ((== cryptWallId) . objId) o
+      countWalls g = length (walls (gameObjects g))
+      seeded n = gameWithSeed n (mkGame { gameShrineFlags = allFlags })
+  -- Sie steht NICHT in der Welt, bevor der Nebel faellt.
+  ok "nicht in objectList"            (null (walls objectList))
+  ok "nicht im Startzustand"          (countWalls (mkGame) == 0)
+  ok "nicht vor dem Nebel"            (countWalls (mkGame { gameShrineFlags = allFlags }) == 0)
+  ok "nach spawnCryptWall eine Wand"  (countWalls (spawnCryptWall mkGame) == 1)
+  -- Idempotent: `fogEnding` kann mehrfach durchlaufen.
+  ok "zweimal spawnen -> eine Wand"   (countWalls (spawnCryptWall (spawnCryptWall mkGame)) == 1)
+  ok "dreimal spawnen -> eine Wand"   (countWalls (spawnCryptWall (spawnCryptWall (spawnCryptWall mkGame))) == 1)
+  -- Nebelwoelfe und Wand entstehen unabhaengig voneinander.
+  let withWolves g = g { gameWolves = spawnPostFogWolves (gameWolves g) allFlags }
+      fogged = spawnCryptWall (withWolves (seeded 1))
+  ok "Nebelwoelfe + Wand"             (countWalls fogged == 1
+                                         && length (filter (>= 100) (map wolfId (gameWolves fogged))) == 8)
+  ok "Nebel aktiv"                    (fogActive fogged)
+  -- Nur `read` und `examine`. KEIN `take`: die Wand gehoert zum Ort, und ein
+  -- `take` wuerde sie aus `gameObjects` loeschen - `performAction` laesst es
+  -- auch gar nicht erst zu.
+  ok "nur read und examine"           (objActions cryptWall == ["read", "examine"])
+  ok "nicht mitnehmbar"               (not (any (`elem` objActions cryptWall) ["take", "pick"]))
+  ok "steht im Verlies (Loc 60)"      (objPos cryptWall == 60)
+  ok "Loc 60 existiert"               (any ((== 60) . locId) gameMap)
+  ok "Name ist eindeutig"             (length (filter ((== "Carved Wall") . objName)
+                                                  (objectList ++ dropFoodTemplates ++ [cryptWall])) == 1)
+  ok "Name kleingeschrieben frei"     (length (filter ((== "carved wall") . map toLower . objName)
+                                                  (objectList ++ dropFoodTemplates ++ [cryptWall])) == 1)
+  ok "ID passt zur Konstanten"        (objId cryptWall == cryptWallId)
+  ok "ID liegt hinter dem Content"    (cryptWallId > 38 && cryptWallId == 39)
+  ok "kollidiert nicht mit einem Wolf" (cryptWallId `notElem` map wolfId initialWolves)
+  -- Der Text ist der volle Wortlaut: `readObj` und `examineObj` geben beide
+  -- `objectTextFor` aus, und genau das ist der Grund, warum BEIDE Verben
+  -- denselben Zweig nehmen. Ein Ausgehen nur fuer `examine` wuerde die
+  -- halbe Prophezeiion umsonst machen.
+  ok "hat objectText"                 (inRange (bounds objectText) cryptWallId
+                                         && length (objectTextFor cryptWall) > 0)
+  ok "nennt die Inschrift"            ("Four that wake, one that comes"
+                                         `isInfixOf` objectTextFor cryptWall)
+  ok "nennt den Leser als den einen"  (any (`isInfixOf` objectTextFor cryptWall)
+                                         ["whoever stands here and reads this"
+                                         ,"It is called by the person who woke the four"])
+  -- Ein Objekt, das im Zustand liegt, ist auffindbar - sonst waere die
+  -- Wand sichtbar, aber nicht ansprechbar.
+  let inVault = (spawnCryptWall mkGame) { gameLocation = locById 60 }
+      findIt x = getObjectInList x (gameObjects inVault)
+  ok "im Verlies auffindbar"          (fmap objId (findIt "carved wall") == Just cryptWallId)
+  -- Wie jedes andere Objekt im Spiel: der Name muss vollstaendig genannt
+  -- werden, `getObjectInList` kennt keine Teilzeichenketten. Im Verlies
+  -- steht ausserdem die "Vault Door" (35) - die beiden Namen muessen sich
+  -- also auch nicht gegenseitig aufloesen.
+  ok "'wall' allein findet nichts"     (findIt "wall" == Nothing)
+  ok "kollidiert nicht mit Vault Door" (findIt "vault door" /= findIt "carved wall")
+  ok "vorher nicht auffindbar"        (getObjectInList "carved wall" (gameObjects mkGame) == Nothing)
+  ok "erscheint in der Objektliste"   ("Carved Wall"
+                                         `isInfixOf` getObjHere (gameObjects inVault) (gameWolves inVault) (locById 60))
+  -- Das Terminal-Flag: heisst "Zustand", nicht "Ursache", und haengt
+  -- nicht an den LP. Der `gameLoop`-Zweig prueft es VOR `getHP`.
+  ok "Flag startet aus"               (not (gameWallRead mkGame))
+  ok "Flag ist unabhaengig von den LP"
+      (gameWallRead mkGame `seq` not (gameWallRead (mkGame { gameCharacter = (gameCharacter mkGame) { charLife = 30 } })))
+  ok "Flag true bei vollen LP setzbar"
+      (gameWallRead (mkGame { gameWallRead = True })
+       && getHP (gameCharacter (mkGame { gameWallRead = True })) == 30)
+  ok "Flag steckt im Gleichheitsvergleich"
+      (mkGame /= mkGame { gameWallRead = True })
+  -- (Plan 3) Ein fester Befehlsweg mit der Wand ergibt dasselbe Ergebnis:
+  -- gleicher Seed -> gleicher Endzustand, und die Wand liegt genau einmal da.
+  -- Der Weg laeuft bewusst ueber den Crypt Warden (58): `advanceTurn` selbst
+  -- zieht keinen Zufall. Die beiden Wuerfe auf dem Weg sind die
+  -- Nebelflucht (immer erfolgreich, Punkt 3) und die Beute des Wolfs - nur
+  -- letztere unterscheidet die Seeds wirklich.
+  let walk g locs = foldl (\acc l -> advanceTurn acc { gameLocation = locById l }) g locs
+      toVault g = let g1 = walk g [58]
+                      (dropped, g2) = wolfDrop g1 cryptWardenId
+                  in (map objId dropped, walk g2 [59, 60])
+      run n = let (dropped, g1) = toVault (seeded n)
+                  g2 = spawnCryptWall g1
+              in (dropped, countWalls g2, getSteps (gameCharacter g2)
+                 , getHP (gameCharacter g2))
+  ok "gleicher Seed -> gleiches Ergebnis"
+      (all (\n -> run n == run n) [1 .. 25])
+  ok "verschiedene Seeds -> verschiedene Verlaeufe"
+      (length (nub (map first (map (\n -> run n) [1 .. 25]))) > 1)
+  -- Und was faellt, faellt im Raum des Wolfs, nicht im Verlies.
+  let droppedAt n = let (dropped, g1) = toVault (seeded n)
+                    in [ objPos o | o <- gameObjects g1, objId o `elem` dropped ]
+  ok "Beute liegt auf Loc 58"         (all (\n -> all (== 58) (droppedAt n)) [1 .. 25])
+  -- Der Nebel-Todesmarsch laeuft im Verlies weiter - die Katakomben sind
+  -- KEIN Versteck. `advanceTurn` hat keine Ortspruefung (Plan-Notiz 0), und
+  -- daran wird hier nichts geaendert.
+  ok "Verlies ist kein Versteck"      (getHP (gameCharacter (walk (seeded 1) [59, 60, 59, 60])) < 30)
+  ok "LP sinken im Verlies"           (let a = seeded 1
+                                           b = walk a [59, 60]
+                                       in getHP (gameCharacter b) == getHP (gameCharacter a) - 2)
+
+
 objById :: Int -> Object
 objById i = case filter ((== i) . objId) objectList of
               (o:_) -> o
@@ -459,6 +560,10 @@ isPrefixOf' :: String -> String -> Bool
 isPrefixOf' [] _ = True
 isPrefixOf' _ [] = False
 isPrefixOf' (x:xs) (y:ys) = x == y && isPrefixOf' xs ys
+
+-- `Data.Tuple` waere fuer einen Test importing, deshalb lokal.
+first :: (a, b, c, d) -> a
+first (a, _, _, _) = a
 
 hasDef :: Int -> Bool
 hasDef i = i `elem` [ fst e | e <- assocs objectText ]

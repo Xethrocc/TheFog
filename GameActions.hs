@@ -228,6 +228,21 @@ wolfLocOf :: ObjectID -> [Wolf] -> Int
 wolfLocOf wid = maybe 0 wolfLoc . find ((== wid) . wolfId)
 
 -- ---------------------------------------------------------------------------
+-- (Punkt 6) Die Wand entsteht genau einmal, mit dem Nebel
+-- ---------------------------------------------------------------------------
+-- Dieselbe Guard-Form wie `spawnPostFogWolves`: `fogEnding` kann mehrfach
+-- durchlaufen (die Aktivierungs-Branch in main.hs haengt daran, und ein
+-- Checkpoint koennte denselben Zustand erneut durchspielen) - ohne den
+-- Guard laege am Ende eine zweite Wand im Raum und `getObjectInList`
+-- wuerde bei zwei gleichen Namen nur eine davon finden.
+--
+-- Der Guard prueft die Objekt-ID, nicht die Anzahl: so ist auch ein
+-- Zustand geschuetzt, in dem die Wand aus einem anderen Grund schon da ist.
+spawnCryptWall :: Game -> Game
+spawnCryptWall game
+    | any ((== cryptWallId) . objId) (gameObjects game) = game
+    | otherwise = game { gameObjects = gameObjects game ++ [cryptWall] }
+
 -- (Punkt 2) `save` ohne Prinzessin im Raum
 -- ---------------------------------------------------------------------------
 -- Anwesenheit muss ausdruecklich geprueft werden. Der Status allein sagt
