@@ -484,9 +484,9 @@ main = do
                                          && length (objectTextFor cryptWall) > 0)
   ok "nennt die Inschrift"            ("Four that wake, one that comes"
                                          `isInfixOf` objectTextFor cryptWall)
-  ok "nennt den Leser als den einen"  (any (`isInfixOf` objectTextFor cryptWall)
-                                         ["whoever stands here and reads this"
-                                         ,"It is called by the person who woke the four"])
+  ok "nennt den Helden als den Siegelnden" (any (`isInfixOf` objectTextFor cryptWall)
+                                         ["the seal shall shatter"
+                                         ,"The one chosen by the sword"])
   -- Ein Objekt, das im Zustand liegt, ist auffindbar - sonst waere die
   -- Wand sichtbar, aber nicht ansprechbar.
   let inVault = (spawnCryptWall mkGame) { gameLocation = locById 60 }

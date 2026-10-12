@@ -303,9 +303,10 @@ dropFoodTemplates =
 --
 -- Der Text ist der VOLE, ungeschnittene Wortlaut der Prophezeiung. Die
 -- zwoelf Inschriften an den Umkehrpunkten sagen "Four that wake, one that
--- comes"; die Wand sagt, dass der eine den Nebel ruft - und dass er der
--- Leser ist. Wer nur einen der beiden Verben abschirmt, gibt die ganze
--- Prophezeiung umsonst preis.
+-- comes"; die Wand veroeffentlicht den Rest: der Kristall bricht das Siegel,
+-- der Nebel wird entfesselt, und erst nach hundert Jahren kommt der vom
+-- Schwert Erwaehlte, um ihn wieder zu versiegeln. Wer nur einen der beiden
+-- Verben abschirmt, gibt die ganze Prophezeiung umsonst preis.
 -- ---------------------------------------------------------------------------
 cryptWall :: Object
 cryptWall = Object { objPos = 60, objId = cryptWallId
@@ -419,7 +420,7 @@ objectText = array (0,39) [
         (38,"A sealed tin from a household store. The date on the lid is stamped, and the seal is still unbroken."),
 
         -- (Punkt 6) Der volle Wortlaut. Siehe `cryptWall`.
-        (39,"The whole of the far wall is cut over, in one hand, and the letters run down to the floor.\n\n'Four that wake, one that comes.\n\nThe four are the shrines of the four elements. They will be woken, in the order they were built, by a person who went looking for a way to wake them.\n\nThe one is not a hero. The one is a person. The one is whoever stands here and reads this, and by now they have been called.\n\nThe fog does not come. It is called. It is called by the person who woke the four, because that person took the crystal in the hand knowing that it could open the shrines, and not knowing that opening them is what the fog was waiting for.\n\nA hero who wields the sword will turn the fog back. It is written here so that the one who is called will go and find him. There is no hero in this land. There is a sword in a dark room, and it lights up for whoever lifts it, and afterwards it does nothing at all.'\n\nThe cutting stops there.")
+        (39,"The whole of the far wall is carved deep into the stone, the runes trailing down to the floor and glowing faintly as your eyes follow the script.\n\n'Four that wake, one that comes.\n\nWhen the crystal awakens the four shrines of the four elements,\nthe seal shall shatter, and the Fog will be unleashed upon the realm once more.\n\nIt will spread to beasts and humans alike.\nThe fallen will rise to hunt the living, and the living will be driven mad by the whispers of the Fog.\n\nA century of death and terror. A century of ruin.\n\nOnly when the hundred years have passed will the hero come to seal it again:\nThe one chosen by the sword. The light of the blade will protect him, as he protects the world.'\n\nThe carving stops there")
         ]
 
 -- ---------------------------------------------------------------------------
